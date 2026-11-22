@@ -3,9 +3,10 @@
 const BRAND = { name: 'Webly', host: 'webly.codelove.in' };
 
 /* ---------- state ---------- */
-const S = { theme: 'light', demo: false, conn: { ga: false, gsc: false, ads: false }, site: 'all', range: 28, kpi: 'users', off: {}, manual: [], info: {}, user: null };
+const S = { theme: 'light', demo: false, conn: { ga: false, gsc: false, ads: false }, site: 'all', preset: '28', cStart: '', cEnd: '', compare: true, gam: 'users', gsm: 'clicks', gdev: '', kpi: 'users', off: {}, manual: [], info: {}, user: null };
 try { const o = JSON.parse(localStorage.getItem('pulse_state3') || '{}'); delete o.user; Object.assign(S, o); } catch (e) { /* ignore */ }
 S.info = S.info || {}; Object.values(S.info).forEach((i) => { delete i.scanning; });
+Object.defineProperty(S, 'range', { get: () => RANGE().n, set: () => {} });
 const save = () => { try { const { user, ...o } = S; localStorage.setItem('pulse_state3', JSON.stringify(o, (k, v) => (k === 'home' ? undefined : v))); } catch (e) { /* ignore */ } };
 document.documentElement.dataset.theme = S.theme;
 const X = {};            // extra data for the current route (real mode)
@@ -32,7 +33,7 @@ const P = {
   users: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
   eye: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', cursor: 'M3 3l7 18 2.5-7.5L20 11z',
   spark: 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z', plus: 'M12 5v14M5 12h14', x: 'M18 6 6 18M6 6l12 12', ok: 'M20 6 9 17l-5-5',
-  ext: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'
+  cal: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', ext: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'
 };
 const I = (n, s) => `<svg class="i" viewBox="0 0 24 24"${s ? ` style="width:${s}px;height:${s}px"` : ''}><path d="${P[n] || P.globe}"/></svg>`;
 
@@ -51,6 +52,37 @@ const real = () => !S.demo && Object.values(S.conn).some(Boolean);
 const connCount = () => Object.values(S.conn).filter(Boolean).length;
 const signed = () => !!(S.user || S.demo);
 
+/* ---------- date range ---------- */
+const PRESETS = [['today', 'Today'], ['yesterday', 'Yesterday'], ['7', 'Last 7 days'], ['28', 'Last 28 days'], ['90', 'Last 90 days'], ['365', 'Last 12 months'], ['mtd', 'This month'], ['lastmonth', 'Last month'], ['custom', 'Custom range']];
+const isoD = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+const addD = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const parseD = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+function RANGE() {
+  const t = new Date(), today = isoD(t); let p = S.preset || '28', start, end;
+  if (p === 'today') start = end = today;
+  else if (p === 'yesterday') start = end = isoD(addD(t, -1));
+  else if (p === 'mtd') { start = isoD(new Date(t.getFullYear(), t.getMonth(), 1)); end = today; }
+  else if (p === 'lastmonth') { start = isoD(new Date(t.getFullYear(), t.getMonth() - 1, 1)); end = isoD(new Date(t.getFullYear(), t.getMonth(), 0)); }
+  else if (p === 'custom' && /^\d{4}-\d{2}-\d{2}$/.test(S.cStart) && /^\d{4}-\d{2}-\d{2}$/.test(S.cEnd) && S.cStart <= S.cEnd) { start = S.cStart; end = S.cEnd > today ? today : S.cEnd; }
+  else { p = ['7', '28', '90', '365'].includes(String(p)) ? String(p) : '28'; end = today; start = isoD(addD(t, -(+p - 1))); }
+  const n = Math.round((parseD(end) - parseD(start)) / 864e5) + 1, prevEnd = isoD(addD(parseD(start), -1)), prevStart = isoD(addD(parseD(prevEnd), -(n - 1)));
+  const f = (s) => parseD(s).toLocaleDateString('en', { month: 'short', day: 'numeric' });
+  return { preset: p, start, end, n, prevStart, prevEnd, hourly: n === 1 && (p === 'today' || p === 'yesterday'), name: (PRESETS.find((x) => x[0] === p) || [0, 'Custom range'])[1], text: n > 1 ? `${f(start)} - ${f(end)}` : f(start), today };
+}
+/** Series window: keys (hourly for today/yesterday, else daily) and dkeys (always daily), 2 periods each. */
+function mkWin() {
+  const r = RANGE(), N = r.n < 7 ? 14 : r.n, dkeys = [];
+  for (let i = 2 * N - 1; i >= 0; i--) dkeys.push(isoD(addD(parseD(r.end), -i)));
+  let keys = dkeys, KN = N;
+  if (r.hourly) { keys = []; for (const d of [isoD(addD(parseD(r.end), -1)), r.end]) for (let h = 0; h < 24; h++) keys.push(`${d} ${String(h).padStart(2, '0')}`); KN = 24; }
+  return { hourly: r.hourly, keys, N: KN, n: r.hourly ? 24 : r.n, dkeys, dN: N, dn: r.n, start: keys[0].slice(0, 10), end: keys[keys.length - 1].slice(0, 10), range: r };
+}
+const GAKEYS = new Set(['users', 'sessions', 'views', 'sec', 'eng', 'newu']);
+const curWin = () => (S.demo ? mkWin() : (PX.R.win || mkWin()));
+function chartLabels(key) {
+  const W = curWin(), ga = GAKEYS.has(key), keys = ga ? W.keys : W.dkeys, N = ga ? W.N : W.dN;
+  return keys.slice(N).map((k) => (k.length > 10 ? k.slice(11) + ':00' : parseD(k).toLocaleDateString('en', { month: 'short', day: 'numeric' })));
+}
 /* ---------- sites ---------- */
 const DEMO = ['codelove.in', 'games.codelove.in', 'videomaker.codelove.in', 'apps.codelove.in', 'linkinbio.codelove.in'].map((d, i) => mk(d, ['CodeLove', 'Games', 'Video Maker', 'Apps Store', 'Link in Bio'][i]));
 function allSites() {
@@ -137,26 +169,23 @@ function series(key, days, base, vol = .25, trend = .6) {
   for (let i = 0; i < days; i++) { const wk = 1 + .18 * Math.sin(i / 7 * Math.PI * 2); v = base * (1 + trend * i / days) * wk * (1 + (r() - .5) * vol); out.push(Math.max(0, v)); }
   return out;
 }
-function realArr(key, hosts) { const n = S.range, tot = new Array(n * 2).fill(0); hosts.forEach((h) => { const a = (PX.R.ser[key] || {})[h]; if (a) a.forEach((v, i) => { tot[i] += v; }); }); return { prev: tot.slice(0, n), cur: tot.slice(n) }; }
+const BASE = { users: 420, newu: 300, sessions: 610, views: 1400, sec: 42000, eng: 380, clicks: 150, impr: 5200, posw: 61360, rev: 2.4, adpv: 2600, adimp: 5000, adclk: 60 };
+function realArr(key, hosts) {
+  const W = curWin(), ga = GAKEYS.has(key), N = ga ? W.N : W.dN, n = ga ? W.n : W.dn, store = (ga ? PX.R.ser : PX.R.dser)[key] || {}, tot = new Array(2 * N).fill(0);
+  hosts.forEach((h) => { const a = store[h]; if (a) a.forEach((v, i) => { if (i < 2 * N) tot[i] += v; }); });
+  return { prev: tot.slice(0, N), cur: tot.slice(N), tc: sum(tot.slice(2 * N - n)), tp: sum(tot.slice(2 * N - 2 * n, 2 * N - n)) };
+}
+function demoArr(key, hosts) {
+  const W = curWin(), ga = GAKEYS.has(key), N = ga ? W.N : W.dN, n = ga ? W.n : W.dn, tot = new Array(2 * N).fill(0), sc = ga && W.hourly ? 1 / 24 : 1;
+  hosts.forEach((h) => { const i = Math.max(0, DEMO.findIndex((s) => s.d === h)), k = 1 / (1 + i * .55); series(key + h, 2 * N, BASE[key] * k * sc, .3, .5).forEach((v, j) => { tot[j] += v; }); });
+  return { prev: tot.slice(0, N), cur: tot.slice(N), tc: sum(tot.slice(2 * N - n)), tp: sum(tot.slice(2 * N - 2 * n, 2 * N - n)) };
+}
 function metric(key) {
-  const days = S.range, sites = activeSites();
-  if (!S.demo) {
-    const a = realArr(key, sites.map((s) => s.d)), t = sum(a.cur), p = sum(a.prev);
-    return { cur: a.cur, prev: a.prev, total: key === 'rev' ? t : Math.round(t), delta: p ? (t - p) / p * 100 : 0 };
-  }
-  const base = { users: 420, sessions: 610, clicks: 150, impr: 5200, rev: 2.4 }[key];
-  const cur = new Array(days).fill(0), prev = new Array(days).fill(0);
-  sites.forEach((s, i) => { const k = 1 / (1 + i * .55), a = series(key + s.d, days * 2, base * k, .3, .5); a.slice(days).forEach((v, j) => { cur[j] += v; }); a.slice(0, days).forEach((v, j) => { prev[j] += v; }); });
-  const t = sum(cur), p = sum(prev);
-  return { cur, prev, total: key === 'rev' ? t : Math.round(t), delta: p ? (t - p) / p * 100 : 0 };
+  const a = (S.demo ? demoArr : realArr)(key, activeSites().map((s) => s.d));
+  return { cur: a.cur, prev: a.prev, total: key === 'rev' ? a.tc : Math.round(a.tc), ptotal: a.tp, delta: a.tp ? (a.tc - a.tp) / a.tp * 100 : 0 };
 }
-function siteTotal(key, host) { // current period total for one site
-  if (!S.demo) return sum(realArr(key, [host]).cur);
-  const i = Math.max(0, enabled().findIndex((s) => s.d === host)), k = 1 / (1 + i * .55);
-  const base = { users: 420, sessions: 610, clicks: 150, impr: 5200, rev: 2.4 }[key] || 100;
-  return sum(series(key + host, S.range * 2, base * k, .3, .5).slice(S.range));
-}
-const totalsOf = (key) => { const a = realArr(key, activeSites().map((s) => s.d)); return [sum(a.cur), sum(a.prev)]; };
+function siteTotal(key, host, prev) { const a = (S.demo ? demoArr : realArr)(key, [host]); return prev ? a.tp : a.tc; }
+const totalsOf = (key) => { const a = (S.demo ? demoArr : realArr)(key, activeSites().map((s) => s.d)); return [a.tc, a.tp]; };
 
 /* ---------- charts ---------- */
 const CH = {};
@@ -214,6 +243,10 @@ const TITLES = { '': ['Overview', 'Everything about your sites, in one place'], 
 const route = () => (location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0]) || '';
 const toolId = () => location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[1] || '';
 
+function rangePicker() {
+  const rg = RANGE();
+  return `<div class="menu" id="mRange"><button class="ctl" data-menu="mRange">${I('cal', 16)}<span>${rg.name}</span><span class="sub" style="font-weight:500">${rg.text}</span>${I('chev', 16)}</button><div class="drop drange">${PRESETS.filter((p) => p[0] !== 'custom').map((p) => `<a data-preset="${p[0]}" class="${rg.preset === p[0] ? 'on' : ''}">${p[1]}</a>`).join('')}<div class="dcustom"><div class="sub" style="margin-bottom:6px">Custom range</div><div class="drow"><input type="date" id="cS" value="${rg.start}" max="${rg.today}"><input type="date" id="cE" value="${rg.end}" max="${rg.today}"></div><button class="btn p sm" data-act="applyrange" style="margin-top:8px">Apply</button></div><label class="sw" style="padding:10px"><input type="checkbox" data-compare ${S.compare ? 'checked' : ''}><i></i><span>Compare with previous period</span></label></div></div>`;
+}
 function shell(r) {
   const nav = NAV.map((n) => n[0] === 'H' ? `<h6>${n[1]}</h6>` : `<a href="#/${n[0]}" class="${r === n[0] ? 'on' : ''}">${I(n[1])}<span>${n[2]}</span>${n[3] ? `<em class="pill" style="font-style:normal">${n[3] === '8' ? '8' : `<i class="ndot ${S.demo || (S.conn[n[3]] && PX.has(n[3])) ? 'ok' : S.conn[n[3]] ? 'warn' : 'off'}" title="${S.demo || (S.conn[n[3]] && PX.has(n[3])) ? 'Connected' : S.conn[n[3]] ? 'Reconnect needed' : 'Not connected'}"></i>`}</em>` : ''}</a>`).join('');
   const sites = enabled(), cur = S.site === 'all' ? null : sites.find((s) => s.d === S.site);
@@ -223,7 +256,7 @@ function shell(r) {
     <div class="upgrade"><b>${S.demo ? 'Demo mode' : connCount() + '/3 connected'}</b><small>${S.demo ? 'Showing sample numbers.' : connCount() === 3 ? 'All sources are live.' : 'Connect the rest to unlock every report.'}</small><br><button data-go="connect">${S.demo ? 'Use my data' : connCount() === 3 ? 'Manage' : 'Connect now'}</button></div></aside>
     <main class="main"><div class="top"><div class="title"><h1>${tt[0]}</h1><p>${tt[1]}</p></div>
       ${showCtl ? `<div class="menu" id="mSite"><button class="ctl" data-menu="mSite">${cur ? fav(cur) : `<span class="fav" style="background:var(--a1)">${I('globe', 15)}</span>`}<span>${cur ? esc(cur.n) : 'All sites'}</span>${I('chev', 16)}</button><div class="drop dsite">${sites.length > 6 ? '<input class="input dsearch" placeholder="Search sites..." data-dsearch autocomplete="off">' : ''}<a data-site="all" class="${S.site === 'all' ? 'on' : ''}"><span class="fav" style="background:var(--a1)">${I('globe', 15)}</span>All sites</a>${sites.map((s) => `<a data-site="${esc(s.d)}" class="${S.site === s.d ? 'on' : ''}">${fav(s)}<span><b style="display:block">${esc(s.n)}</b><small style="color:var(--tx3)">${esc(s.d)}</small></span></a>`).join('')}</div></div>
-      <div class="seg">${[7, 28, 90].map((d) => `<button data-range="${d}" class="${S.range === d ? 'on' : ''}">${d}d</button>`).join('')}</div>` : ''}
+      ${rangePicker()}` : ''}
       <button class="ctl icon" data-act="theme" title="Theme">${I(S.theme === 'dark' ? 'sun' : 'moon')}</button>
       <div class="menu" id="mUser"><button class="avatar" data-menu="mUser">${esc(nm[0].toUpperCase())}</button><div class="drop"><div style="padding:10px 12px"><b>${esc(nm)}</b><br><small style="color:var(--tx3)">${esc(em)}</small></div><button data-act="logout">${I('logout', 18)} Sign out</button></div></div></div>
     <div id="banner"></div><div id="view" class="bento"></div></main></div>`;
@@ -232,9 +265,9 @@ function shell(r) {
 /* ---------- real-data plumbing ---------- */
 async function ensureData() {
   if (!real()) return;
-  const k = S.range + '|' + Object.keys(S.conn).filter((c) => S.conn[c]).join();
+  const W = mkWin(), k = [W.start, W.end, W.dkeys[0], W.hourly, Object.keys(S.conn).filter((c) => S.conn[c]).join()].join('|');
   if (loadKey === k && PX.R.loaded) return;
-  await PX.load(S.conn, S.range); loadKey = k;
+  await PX.load(S.conn, W); loadKey = k;
 }
 function banner() {
   const b = document.getElementById('banner'); if (!b) return; let h = '';
@@ -255,11 +288,7 @@ async function prefetch(r) {
     if (S.conn.ga && PX.has('ga')) X.live = await sf(PX.gaRealtime());
     if (S.conn.gsc && PX.has('gsc')) { const h = bestGsc(); if (h) { X.kwHost = h; X.kw = await sf(PX.keywords(h)); } }
     if (S.conn.ads && PX.has('ads')) X.adsx = await sf(PX.adsExtras());
-  } else if (r === 'analytics' && S.conn.ga && PX.has('ga')) {
-    [X.src, X.dev, X.cty, X.pages] = await Promise.all([sf(PX.gaBreakdown('sessionDefaultChannelGroup', hosts, 'sessions')), sf(PX.gaBreakdown('deviceCategory', hosts)), sf(PX.gaBreakdown('country', hosts)), sf(PX.gaBreakdown('pagePath', hosts, 'screenPageViews', 'pageTitle'))]);
-  } else if (r === 'search' && S.conn.gsc && PX.has('gsc')) {
-    const h = bestGsc(); if (h) { X.kwHost = h; [X.kw, X.maps] = await Promise.all([sf(PX.keywords(h)), sf(PX.sitemaps(h))]); }
-  } else if (r === 'adsense' && S.conn.ads && PX.has('ads')) X.adsx = await sf(PX.adsExtras());
+  }
 }
 function demoKeywords(host) { const r = rnd(hash(host)); return ['free video maker', 'js game emulator', 'online video cutter', 'link in bio free', 'night heist game', 'java games online', 'video to gif', 'android apps store'].map((q, i) => ({ q, impr: Math.round(2000 * r() * (1 - i / 10) + 80), clicks: Math.round(120 * r() * (1 - i / 9)), pos: 3 + r() * 24, prev: 3 + r() * 24 })); }
 const keywordsFor = async (host) => { if (S.demo) return demoKeywords(host); if (!S.conn.gsc) throw new Error('Connect Search Console to see Google keywords.'); if (!PX.has('gsc')) throw new Error('Reconnect Search Console first (Connections page).'); await ensureData(); return PX.keywords(host); };
@@ -278,8 +307,8 @@ V[''] = () => {
   if (!S.demo && connCount() === 0) return onboarding();
   const cc = S.demo ? { ga: 1, gsc: 1, ads: 1 } : S.conn, u = metric('users'), c = metric('clicks'), im = metric('impr'), rv = metric('rev');
   const kp = [{ k: 'users', l: 'Visitors', i: 'users', m: u, src: 'ga', f: fmt }, { k: 'clicks', l: 'Google clicks', i: 'cursor', m: c, src: 'gsc', f: fmt }, { k: 'impr', l: 'Impressions', i: 'eye', m: im, src: 'gsc', f: fmt }, { k: 'rev', l: 'AdSense earnings', i: 'dollar', m: rv, src: 'ads', f: money }];
-  const kpOn = kp.filter((x) => cc[x.src]), sel = kpOn.find((x) => x.k === S.kpi) || kpOn[0], lab = dayLabels(S.range), h = new Date().getHours();
-  const hero = `<div class="card hero c12"><div><h2>Good ${h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'}${S.user ? ', ' + esc(S.user.name.split(' ')[0]) : ''}</h2><p>${cc.ga ? `${fmt(u.total)} visitors in the last ${S.range} days` : `${enabled().length} site${enabled().length === 1 ? '' : 's'} added`}${cc.ads ? ` and ${money(rv.total)} earned` : ''}. Here is what needs your attention.</p></div><div class="row"><button class="btn p" data-go="reports">${I('file', 16)} Generate report</button><button class="btn o" data-go="tools/health">${I('tools', 16)} Run site health</button></div></div>`;
+  const kpOn = kp.filter((x) => cc[x.src]), sel = kpOn.find((x) => x.k === S.kpi) || kpOn[0], lab = chartLabels(sel.k), h = new Date().getHours();
+  const hero = `<div class="card hero c12"><div><h2>Good ${h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'}${S.user ? ', ' + esc(S.user.name.split(' ')[0]) : ''}</h2><p>${cc.ga ? `${fmt(u.total)} visitors (${RANGE().name.toLowerCase()})` : `${enabled().length} site${enabled().length === 1 ? '' : 's'} added`}${cc.ads ? ` and ${money(rv.total)} earned` : ''}. Here is what needs your attention.</p></div><div class="row"><button class="btn p" data-go="reports">${I('file', 16)} Generate report</button><button class="btn o" data-go="tools/health">${I('tools', 16)} Run site health</button></div></div>`;
   const miss = ['ga', 'gsc', 'ads'].filter((k) => !cc[k]);
   const strip = miss.length ? `<div class="card c12" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 20px"><span class="sub" style="flex:1;min-width:200px">Connect more to see more on this page:</span>${miss.map((k) => `<button class="btn o sm" data-act="connect" data-k="${k}">${I('plug', 14)} ${NAMES[k]}</button>`).join('')}</div>` : '';
   const live = cc.ga ? (() => {
@@ -296,57 +325,16 @@ V[''] = () => {
   }
   todo.push(['heart', 'Run a site health check', 'It takes about 20 seconds and checks all your sites.']);
   const kws = S.demo ? demoKeywords('x').slice(0, 4) : (X.kw || []).slice(0, 4), span = 12 / kpOn.length;
-  return hero + strip + kpis(kpOn.map((x) => `<div class="card kpi c3 ${sel.k === x.k ? 'on' : ''}" style="grid-column:span ${span}" data-kpi="${x.k}" data-src="${x.src}"><div class="kh"><span class="tile">${I(x.i, 16)}</span>${delta(x.m.delta)}</div><div class="v">${x.f(x.m.total)}</div><div class="l">${x.l}</div>${spark(x.m.cur, '#4f46e5')}</div>`))
-    + `<div class="card ${cc.ga ? 'c8' : 'c12'}"><div class="ch"><div><h3>${sel.l}</h3><div class="sub">Last ${S.range} days vs the period before</div></div></div>${lineChart('ov', [{ n: sel.l, c: '#4f46e5', v: sel.m.cur }, { n: 'Previous', c: '#94a3b8', v: sel.m.prev }], lab, 270, sel.f)}</div>${live}`
+  return hero + strip + kpis(kpOn.map((x) => `<div class="card kpi c3 ${sel.k === x.k ? 'on' : ''}" style="grid-column:span ${span}" data-kpi="${x.k}" data-src="${x.src}"><div class="kh"><span class="tile">${I(x.i, 16)}</span>${S.compare ? delta(x.m.delta) : ''}</div><div class="v">${x.f(x.m.total)}</div><div class="l">${x.l}</div>${spark(x.m.cur, '#4f46e5')}</div>`))
+    + `<div class="card ${cc.ga ? 'c8' : 'c12'}"><div class="ch"><div><h3>${sel.l}</h3><div class="sub">${RANGE().name}${S.compare ? ' vs the previous period' : ''}</div></div></div>${lineChart('ov', [{ n: sel.l, c: '#4f46e5', v: sel.m.cur }, ...(S.compare ? [{ n: 'Previous period', c: '#94a3b8', v: sel.m.prev }] : [])], lab, 270, sel.f)}</div>${live}`
     + `<div class="card ${cc.gsc ? 'c6' : 'c12'}"><div class="ch"><h3>What to do</h3><span class="sp tag mute">${Math.min(todo.length, 5)} tasks</span></div>${todo.slice(0, 5).map((t) => `<div class="todo"><span class="ic">${I(t[0], 16)}</span><div><b>${esc(t[1])}</b><span>${esc(t[2])}</span></div></div>`).join('')}</div>`
     + (cc.gsc ? `<div class="card c6"><div class="ch"><h3>Top keywords</h3><span class="sp sub">${X.kwHost ? esc(X.kwHost) : 'Google position'}</span></div>${kws.length ? `<div class="list">${kws.map((k) => `<div class="li"><span class="rank">${Math.round(k.pos)}</span><div class="t"><b>${esc(k.q)}</b><span>${fmt(k.impr)} impressions</span></div></div>`).join('')}</div>` : '<p class="empty">No keyword data yet.</p>'}</div>` : '')
     + `<div class="card c12"><div class="ch"><h3>Your sites</h3><span class="sp sub">${activeSites().length} site${activeSites().length === 1 ? '' : 's'}</span></div>${activeSites().length ? `<div style="overflow:auto"><table><tr><th>Site</th>${cc.ga ? '<th class="n">Visitors</th>' : ''}${cc.gsc ? '<th class="n">Clicks</th>' : ''}${cc.ads ? '<th class="n">Earnings</th>' : ''}<th></th></tr>${activeSites().map((s) => `<tr class="h"><td><span class="site">${fav(s)}<span>${esc(s.n)}<br><small style="color:var(--tx3);font-weight:500">${esc(s.d)}</small></span></span></td>${cc.ga ? `<td class="n">${fmt(siteTotal('users', s.d))}</td>` : ''}${cc.gsc ? `<td class="n">${fmt(siteTotal('clicks', s.d))}</td>` : ''}${cc.ads ? `<td class="n">${money(siteTotal('rev', s.d))}</td>` : ''}<td class="n"><a class="btn o sm" href="#/tools/health?site=${encodeURIComponent(s.d)}">Check health</a></td></tr>`).join('')}</table></div>` : `<div class="empty"><p style="margin-bottom:12px">No sites found yet.</p><button class="btn p sm" data-go="connect">Add a site</button></div>`}</div>`;
 };
 
-V.analytics = () => {
-  if (!S.demo && !S.conn.ga) return none('ga', 'Google Analytics');
-  const u = metric('users'), se = metric('sessions'), lab = dayLabels(S.range);
-  let t2, t3, srcs, devs, ctys, pages;
-  if (S.demo) { t2 = '1m 42s'; t3 = '41%'; srcs = [['Organic Search', 54], ['Direct', 21], ['Social', 14], ['Other', 11]]; devs = [['mobile', 68], ['desktop', 27], ['tablet', 5]]; ctys = [['India', 62], ['United States', 14], ['United Kingdom', 6], ['Singapore', 4], ['Germany', 3]]; pages = [['/', 'Home'], ['/video-maker', 'Video Maker'], ['/games/night-heist', 'Night Heist'], ['/apps', 'Apps'], ['/emulator', 'Java Emulator']].map((p, i) => [p[0], p[1], Math.round(u.total * (1.9 - i * .28))]); }
-  else {
-    const [sc] = totalsOf('sec'), [ec] = totalsOf('eng'), [ss] = totalsOf('sessions'), [uu] = totalsOf('users');
-    t2 = uu ? `${Math.floor(sc / uu / 60)}m ${Math.round(sc / uu % 60)}s` : '-'; t3 = ss ? Math.round((1 - ec / ss) * 100) + '%' : '-';
-    srcs = (X.src || []).map((r) => [r.k[0], r.v]); devs = (X.dev || []).map((r) => [r.k[0], r.v]); const ct = (X.cty || []), ctt = sum(ct.map((r) => r.v)) || 1; ctys = ct.slice(0, 6).map((r) => [r.k[0], Math.round(r.v / ctt * 100)]); pages = (X.pages || []).slice(0, 8).map((r) => [r.k[0], r.k[1], r.v]);
-  }
-  const dn = (a) => donut(a.map((r, i) => ({ n: r[0], v: r[1], c: PAL[i % PAL.length] })));
-  const pmax = Math.max(1, ...pages.map((p) => p[2]));
-  return kpis([kpiTile('Users', fmt(u.total), u.delta, 'users'), kpiTile('Sessions', fmt(se.total), se.delta, 'eye'), kpiTile('Avg. time per user', t2, null, 'pulse'), kpiTile('Bounce rate', t3, null, 'cursor')])
-    + `<div class="card c8"><div class="ch"><div><h3>Users and sessions</h3><div class="sub">Daily, last ${S.range} days</div></div></div>${lineChart('an', [{ n: 'Users', c: '#4f46e5', v: u.cur }, { n: 'Sessions', c: '#94a3b8', v: se.cur }], lab)}</div>`
-    + `<div class="card c4"><div class="ch"><h3>Where visitors come from</h3></div>${srcs.length ? dn(srcs) : '<p class="empty">No data</p>'}<div class="ch" style="margin-top:22px"><h3>Devices</h3></div>${devs.length ? dn(devs) : '<p class="empty">No data</p>'}</div>`
-    + `<div class="card c7"><div class="ch"><h3>Top pages</h3></div>${pages.length ? `<table><tr><th>Page</th><th class="n">Views</th><th>Share</th></tr>${pages.map((p) => `<tr class="h"><td><b>${esc(p[1] || p[0])}</b><br><small style="color:var(--tx3)">${esc(p[0])}</small></td><td class="n">${fmt(p[2])}</td><td style="width:32%"><div class="bar"><i style="width:${p[2] / pmax * 100}%"></i></div></td></tr>`).join('')}</table>` : '<p class="empty">No page data yet.</p>'}</div>`
-    + `<div class="card c5"><div class="ch"><h3>Top countries</h3></div><div class="list">${ctys.map((c) => `<div class="li"><span class="rank">${esc(String(c[0])[0])}</span><div class="t"><b>${esc(c[0])}</b><div class="bar" style="margin-top:6px"><i style="width:${Math.min(100, c[1] * 1.4)}%"></i></div></div><b>${c[1]}%</b></div>`).join('') || '<p class="empty">No data</p>'}</div></div>`;
-};
-
-V.search = () => {
-  if (!S.demo && !S.conn.gsc) return none('gsc', 'Search Console');
-  const c = metric('clicks'), im = metric('impr'), lab = dayLabels(S.range);
-  const [tc] = totalsOf('clicks'), [ti] = totalsOf('impr'), pw = totalsOf('posw');
-  const ctr = S.demo ? '3.4%' : (ti ? (tc / ti * 100).toFixed(1) + '%' : '-'), pos = S.demo ? '11.8' : (ti ? (pw[0] / ti).toFixed(1) : '-');
-  const kw = S.demo ? demoKeywords('x') : (X.kw || []), maps = X.maps || [];
-  return kpis([kpiTile('Clicks', fmt(c.total), c.delta, 'cursor'), kpiTile('Impressions', fmt(im.total), im.delta, 'eye'), kpiTile('Avg. CTR', ctr, null, 'bolt'), kpiTile('Avg. position', pos, null, 'trend')])
-    + `<div class="card c8"><div class="ch"><div><h3>Clicks and impressions</h3><div class="sub">Impressions are divided by 20 to fit the same chart</div></div></div>${lineChart('sc', [{ n: 'Clicks', c: '#4f46e5', v: c.cur }, { n: 'Impressions / 20', c: '#94a3b8', v: im.cur.map((x) => x / 20) }], lab)}</div>`
-    + `<div class="card c4"><div class="ch"><h3>Sitemaps</h3><span class="sp sub">${X.kwHost ? esc(X.kwHost) : ''}</span></div>${S.demo ? donut([{ n: 'Indexed', v: 86, c: '#16a34a' }, { n: 'Not indexed', v: 9, c: '#dc2626' }, { n: 'Excluded', v: 5, c: '#d97706' }]) : (maps.length ? maps.map((m) => `<div class="todo"><div><b style="word-break:break-all">${esc(m.path.replace(/^https?:\/\//, ''))}</b><span>${m.errors ? `<span class="tag bad">${m.errors} errors</span> ` : '<span class="tag ok">OK</span> '}${m.warnings ? `<span class="tag warn">${m.warnings} warnings</span> ` : ''}${m.submitted ? fmt(m.submitted) + ' URLs submitted' : ''}</span></div></div>`).join('') : '<p class="sub">No sitemap submitted for this site. In Search Console > Sitemaps add <b>sitemap.xml</b>.</p>')}</div>`
-    + `<div class="card c12"><div class="ch"><h3>Keywords</h3><span class="sp sub">What people typed to find you${X.kwHost ? ' · ' + esc(X.kwHost) : ''}</span></div>${kw.length ? `<div style="overflow:auto"><table><tr><th>Keyword</th><th class="n">Impressions</th><th class="n">Clicks</th><th class="n">Position</th><th class="n">Change</th><th></th></tr>${kw.slice(0, 25).map((k) => { const d = k.prev ? k.prev - k.pos : 0; return `<tr class="h"><td><b>${esc(k.q)}</b></td><td class="n">${fmt(k.impr)}</td><td class="n">${fmt(k.clicks)}</td><td class="n"><span class="tag ${k.pos <= 10 ? 'ok' : 'warn'}">${k.pos.toFixed(1)}</span></td><td class="n">${k.prev ? `<span class="dl ${d >= 0 ? 'up' : 'dn'}">${d >= 0 ? '&#9650;' : '&#9660;'} ${Math.abs(d).toFixed(1)}</span>` : '<span class="sub">new</span>'}</td><td class="n"><a class="btn o sm" href="https://www.google.com/search?q=${encodeURIComponent(k.q)}" target="_blank" rel="noopener">Google page</a></td></tr>`; }).join('')}</table></div>` : '<p class="empty">No keyword data yet for this site.</p>'}</div>`;
-};
-
-const ADS_STATE = { READY: ['Ready', 'ok'], GETTING_READY: ['Getting ready', 'warn'], REQUIRES_REVIEW: ['Requires review', 'warn'], NEEDS_ATTENTION: ['Needs attention', 'bad'] };
-const demoAdsRows = () => DEMO.map((s, i) => ({ d: s.d, st: i === 4 ? 'GETTING_READY' : 'READY', auto: i !== 3, e: siteTotal('rev', s.d) }));
-V.adsense = () => {
-  if (!S.demo && !S.conn.ads) return none('ads', 'AdSense');
-  const rv = metric('rev'), lab = dayLabels(S.range), ex = X.adsx || {};
-  const [pv] = totalsOf('adpv'), [ck] = totalsOf('adclk'), [ad] = totalsOf('adimp');
-  const rpm = S.demo ? 1.84 : (pv ? rv.total / pv * 1000 : 0), bal = S.demo ? 63.4 : (ex.unpaid == null ? null : ex.unpaid), cu = S.demo ? '$' : (ex.currency || '$'), perDay = rv.total / S.range;
-  const rows = S.demo ? demoAdsRows() : (ex.sites || []).map((s) => ({ d: s.domain, st: s.state, auto: s.autoAdsEnabled, e: siteTotal('rev', s.domain) }));
-  return kpis([kpiTile('Earnings', money(rv.total), rv.delta, 'dollar'), kpiTile('Page RPM', money(rpm), null, 'trend'), kpiTile('Ad clicks', fmt(S.demo ? rv.total * 9 : ck), null, 'cursor'), kpiTile('Ad impressions', fmt(S.demo ? rv.total * 520 : ad), null, 'eye')])
-    + `<div class="card c8"><div class="ch"><div><h3>Earnings</h3><div class="sub">Estimated, per day</div></div></div>${lineChart('ad', [{ n: 'Earnings', c: '#16a34a', v: rv.cur }], lab, 260, money)}</div>`
-    + `<div class="card c4"><div class="ch"><h3>Next payment</h3></div>${bal == null ? '<p class="sub">Payment info is not available.</p>' : `<div style="font-size:30px;font-weight:700;letter-spacing:-.03em">${esc(cu)}${bal.toFixed(2)}</div><div class="sub">of about 100 payout threshold</div><div class="prog" style="height:10px"><i style="width:${Math.min(100, bal)}%;background:var(--ok)"></i></div>${perDay > 0 && bal < 100 ? `<span class="tag ok">about ${Math.ceil((100 - bal) / perDay)} days to go</span>` : ''}`}</div>`
-    + `<div class="card c12"><div class="ch"><h3>Sites and approval</h3></div>${rows.length ? `<div style="overflow:auto"><table><tr><th>Site</th><th>Approval</th><th>Auto ads</th><th class="n">Earnings</th></tr>${rows.map((r) => { const st = ADS_STATE[r.st] || [String(r.st || 'Unknown').toLowerCase(), 'mute']; return `<tr class="h"><td><span class="site">${fav(mk(r.d))}${esc(r.d)}</span></td><td><span class="tag ${st[1]}">${st[0]}</span></td><td>${r.auto ? '<span class="tag ok">On</span>' : '<span class="tag mute">Off</span>'}</td><td class="n">${money(r.e)}</td></tr>`; }).join('')}</table></div>` : '<p class="empty">No sites found in this AdSense account.</p>'}</div>`;
-};
+V.analytics = (tab) => SEC.analytics(tab);
+V.search = (tab) => SEC.search(tab);
+V.adsense = (tab) => SEC.adsense(tab);
 
 V.tools = () => TL.list.map((t) => `<a class="card tool c3" href="#/tools/${t.id}"><span class="tile">${I(t.i, 20)}</span><h3>${t.n}</h3><p>${t.d}</p><span class="go">Open ${I('arrow', 15)}</span></a>`).join('');
 
@@ -404,7 +392,7 @@ async function genReport() {
     const ps = [];
     try { const a = await TL.healthOf(s.d); a.C.filter((c) => c.lvl !== 'ok').forEach((c) => ps.push({ sev: SEV[c.lvl], t: `${c.label}: ${c.value}`, w: [c.fix || 'Fix this and run the report again.'] })); } catch (e) { ps.push({ sev: 'warn', t: 'Could not check the site', w: ['Make sure the site is online, then try again.'] }); }
     if (real()) {
-      if (S.conn.ga && s.ga) { const c = siteTotal('users', s.d), p = sum(realArr('users', [s.d]).prev); if (p > 30 && c < p * .75) ps.unshift({ sev: 'warn', t: `Visitors dropped ${Math.round((1 - c / p) * 100)}%`, w: ['Open Analytics and compare top pages with the previous period.', 'Check Search Console for ranking drops.'] }); }
+      if (S.conn.ga && s.ga) { const c = siteTotal('users', s.d), p = siteTotal('users', s.d, true); if (p > 30 && c < p * .75) ps.unshift({ sev: 'warn', t: `Visitors dropped ${Math.round((1 - c / p) * 100)}%`, w: ['Open Analytics and compare top pages with the previous period.', 'Check Search Console for ranking drops.'] }); }
       if (S.conn.gsc && s.ga && !s.gsc) ps.unshift({ sev: 'warn', t: 'Not added to Search Console', w: ['Open Search Console and add this site.', 'Submit sitemap.xml.'] });
     }
     data.push({ host: s.d, ps, users: S.conn.ga || S.demo ? Math.round(siteTotal('users', s.d)) : null, rev: S.conn.ads || S.demo ? siteTotal('rev', s.d) : null });
@@ -425,13 +413,17 @@ const reportMd = () => `# ${BRAND.name} report · ${new Date(LASTREP.at).toISOSt
 
 /* ---------- login / home (public) ---------- */
 function loginPage() {
-  return `<div class="login"><div class="l"><div class="brand" style="padding:0"><span class="logo">${I('pulse')}</span>${BRAND.name}</div>
-    <h1>All your website data, <span class="grad">in one place.</span></h1><p>Sign in with Google, connect Analytics, Search Console and AdSense, and get tools plus a report that tells you exactly what to fix.</p>
-    <div class="chips"><span class="chip">${I('chart', 15)} Google Analytics</span><span class="chip">${I('search', 15)} Search Console</span><span class="chip">${I('dollar', 15)} AdSense</span><span class="chip">${I('tools', 15)} 8 tools</span><span class="chip">${I('file', 15)} AI-ready report</span></div></div>
-    <div class="r"><div class="card"><h2 style="font-size:20px;letter-spacing:-.02em">Sign in</h2><p class="sub" style="margin:4px 0 20px">Free. It takes about a minute.</p>
-    <button class="gbtn" data-act="login"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3A12 12 0 0 1 12 24a12 12 0 0 1 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 24 4a20 20 0 1 0 19.6 16.1z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8A12 12 0 0 1 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A12 12 0 0 1 12.7 28l-6.5 5A20 20 0 0 0 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.7-.4-3.9z"/></svg>Continue with Google</button>
-    <div class="mock" style="margin-top:20px">${['Read-only access to your data', 'Disconnect any time', 'No credit card'].map((x) => `<div style="display:flex;gap:10px;color:var(--tx2)"><span style="color:var(--ok)">${I('ok', 16)}</span>${x}</div>`).join('')}</div></div></div>
-    <div class="showcase"><div class="ch"><div><h3 style="font-size:18px">Sites on ${BRAND.name}</h3><div class="sub">Owners chose to be shown here, for free promotion.</div></div></div><div id="dirHome">${dirGrid()}</div></div><div class="foot"><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms</a><span>${BRAND.name} by CodeLove</span></div></div>`;
+  const G = '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3A12 12 0 0 1 12 24a12 12 0 0 1 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 24 4a20 20 0 1 0 19.6 16.1z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8A12 12 0 0 1 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A12 12 0 0 1 12.7 28l-6.5 5A20 20 0 0 0 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.7-.4-3.9z"/></svg>';
+  const feats = [['chart', 'Google Analytics', 'Visitors, pages, sources, countries, devices and live users. Today, yesterday or any date range, with comparison.'], ['search', 'Search Console', 'Queries, pages, positions, sitemaps and index status. See what ranks and what Google has not indexed.'], ['dollar', 'AdSense', 'Earnings, RPM, per-site and per-country numbers, approval status and payments for every site.'], ['file', 'AI-ready reports', 'One click report with problems first and simple fix steps. Copy it for any AI or download it.'], ['globe', 'Free promotion', 'Optional: list your site on the Webly home page so more people can find it. Switch it off any time.'], ['plug', 'Read-only and private', 'Your Google data is read in your browser and never stored by us. Disconnect whenever you like.']];
+  const steps = [['1', 'Sign in with Google', 'Takes a few seconds. No credit card.'], ['2', 'Connect what you use', 'Analytics, Search Console, AdSense. One click each, read-only.'], ['3', 'Get answers', 'See your numbers, run the tools, and read the report that tells you what to fix.']];
+  return `<div class="lp"><header class="lp-nav"><div class="brand" style="padding:0"><span class="logo">${I('pulse')}</span>${BRAND.name}</div><nav><button data-scroll="lpFeat">What we do</button><button data-scroll="lpTools">Tools</button><button data-scroll="lpHow">How it works</button><button data-scroll="lpSites">Sites</button></nav><button class="btn p" data-act="login">Sign in with Google</button></header>
+  <section class="lp-hero"><div><span class="lp-pill">Free for every website owner</span><h1>All your website data, <span class="grad">in one place.</span></h1><p>${BRAND.name} connects Google Analytics, Search Console and AdSense, runs 8 website checks for you, and writes a report that tells you exactly what to fix.</p><div class="lp-cta"><button class="gbtn" data-act="login">${G} Continue with Google</button><button class="btn o" data-scroll="lpFeat" style="height:42px;padding:0 18px">See what it does</button></div><div class="lp-trust"><span>${I('ok', 15)} Read-only access</span><span>${I('ok', 15)} Disconnect any time</span><span>${I('ok', 15)} No credit card</span></div></div>
+  <div class="lp-mock card"><div class="lp-bar"><i></i><i></i><i></i></div><div class="lp-kpis"><div><small>Visitors</small><b>45.3K</b><span class="dl up">&#9650; 23.3%</span></div><div><small>Google clicks</small><b>16.2K</b><span class="dl up">&#9650; 22.3%</span></div><div><small>Earnings</small><b>$253.92</b><span class="dl up">&#9650; 19.6%</span></div></div><svg viewBox="0 0 400 120" preserveAspectRatio="none" style="width:100%;height:120px"><defs><linearGradient id="lpg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4f46e5" stop-opacity=".25"/><stop offset="1" stop-color="#4f46e5" stop-opacity="0"/></linearGradient></defs><path d="M0,90 C40,70 60,95 100,60 C140,25 170,70 210,50 C250,30 280,60 320,25 C350,8 380,30 400,18 L400,120 L0,120Z" fill="url(#lpg)"/><path d="M0,90 C40,70 60,95 100,60 C140,25 170,70 210,50 C250,30 280,60 320,25 C350,8 380,30 400,18" fill="none" stroke="#4f46e5" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg><div class="lp-rows"><div><span class="tag ok">Broken links</span> 0 found on 65 pages</div><div><span class="tag warn">Search Console</span> 2 pages not indexed</div><div><span class="tag ok">Uptime</span> 5 of 5 sites online</div></div></div></section>
+  <section class="lp-sec" id="lpFeat"><h2>What ${BRAND.name} does for you</h2><p class="lp-sub">Everything about your websites, without opening five different tabs.</p><div class="lp-grid">${feats.map((f) => `<div class="card lp-feat"><span class="tile">${I(f[0], 20)}</span><h3>${f[1]}</h3><p>${f[2]}</p></div>`).join('')}</div></section>
+  <section class="lp-sec" id="lpTools"><h2>8 tools that check your sites for you</h2><p class="lp-sub">Type any domain. No Google account needed for these.</p><div class="lp-grid lp-tools">${TL.list.map((t) => `<div class="card lp-feat"><span class="tile">${I(t.i, 20)}</span><h3>${t.n}</h3><p>${t.d}</p></div>`).join('')}</div></section>
+  <section class="lp-sec" id="lpHow"><h2>How it works</h2><div class="lp-steps">${steps.map((s) => `<div class="card"><span class="lp-n">${s[0]}</span><h3>${s[1]}</h3><p>${s[2]}</p></div>`).join('')}</div><div style="text-align:center;margin-top:28px"><button class="gbtn" style="max-width:280px;margin:auto" data-act="login">${G} Get started free</button></div></section>
+  <section class="lp-sec" id="lpSites"><h2>Sites on ${BRAND.name}</h2><p class="lp-sub">Owners chose to be shown here, for free promotion. Connect your site and switch on "Show on home page" to join.</p><div id="dirHome">${dirGrid()}</div></section>
+  <footer class="lp-foot"><div class="brand" style="padding:0"><span class="logo">${I('pulse')}</span>${BRAND.name}</div><span><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms</a></span><span class="sub">${BRAND.name} by CodeLove</span></footer></div>`;
 }
 
 /* ---------- render / events ---------- */
@@ -441,7 +433,7 @@ async function render() {
   if (typeof cleanup === 'function') { cleanup(); cleanup = null; }
   if (ov && ov.classList.contains('open') && !render.keep) ov.classList.remove('open');
   if (!signed()) { app.innerHTML = loginPage(); loadDir(); return; }
-  const r = route(), key = (V[r] ? r : ''), tid = key === 'tools' ? toolId() : '';
+  const r = route(), key = (V[r] ? r : ''), tid = key === 'tools' ? toolId() : '', tab = key === 'tools' ? '' : toolId();
   const seq = render.seq = (render.seq || 0) + 1, y = window.scrollY, ks = render.keepScroll; render.keepScroll = false;
   app.innerHTML = shell(key);
   if (real() && !PX.R.loaded) document.getElementById('view').innerHTML = '<div class="card c12 empty"><span class="spin"></span> Loading your data from Google...</div>';
@@ -450,7 +442,7 @@ async function render() {
   app.innerHTML = shell(key); banner();
   const v = document.getElementById('view');
   if (tid && TL.list.some((t) => t.id === tid)) cleanup = TL.render(tid, v) || null;
-  else v.innerHTML = V[key]();
+  else { v.innerHTML = '<div class="card c12 empty"><span class="spin"></span> Loading...</div>'; SEC.cleanup = null; let html; try { html = await V[key](tab); } catch (e) { html = '<div class="card c12" style="border-color:var(--bad)"><span class="tag bad">Problem</span> ' + esc(e.message) + '</div>'; } if (seq !== render.seq) return; v.innerHTML = html; cleanup = SEC.cleanup || null; SEC.cleanup = null; }
   bindCharts(); window.scrollTo(0, ks ? y : 0);
   if (key === 'explore') loadDir();
   if (key === '' || key === 'connect') autoInfo();
@@ -463,9 +455,11 @@ document.addEventListener('click', async (e) => {
   if (!q('.menu')) document.querySelectorAll('.menu.open').forEach((m) => m.classList.remove('open'));
   if ((el = q('[data-menu]'))) { const m = document.getElementById(el.dataset.menu), o = m.classList.contains('open'); document.querySelectorAll('.menu.open').forEach((x) => x.classList.remove('open')); if (!o) m.classList.add('open'); return; }
   if ((el = q('[data-site]'))) { S.site = el.dataset.site; save(); rerender(); return; }
-  if ((el = q('[data-range]'))) { S.range = +el.dataset.range; save(); rerender(); return; }
+  if ((el = q('[data-preset]'))) { S.preset = el.dataset.preset; save(); rerender(); return; }
+  if ((el = q('[data-compare]'))) { S.compare = el.checked; save(); rerender(); return; }
   if ((el = q('[data-kpi]'))) { if (!S.demo && !S.conn[el.dataset.src]) { location.hash = '#/connect'; return; } S.kpi = el.dataset.kpi; save(); rerender(); return; }
   if ((el = q('[data-go]'))) { location.hash = '#/' + el.dataset.go; return; }
+  if ((el = q('[data-scroll]'))) { const x = document.getElementById(el.dataset.scroll); if (x) x.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   if ((el = q('[data-sitetoggle]'))) { const d = el.dataset.sitetoggle; S.off[d] = !el.checked; if (S.site === d) S.site = 'all'; save(); return; }
   if ((el = q('[data-pub]'))) { const h = el.dataset.pub; if (el.checked) { el.checked = false; promoteDialog(h); } else { try { await DIR.unpublish(h); MINE.delete(h); DIRLIST = null; toast('Removed from the home page'); } catch (er) { el.checked = true; toast(er.message); } } return; }
   if ((el = q('[data-rm]'))) { S.manual = S.manual.filter((d) => d !== el.dataset.rm); save(); rerender(); return; }
@@ -484,6 +478,7 @@ document.addEventListener('click', async (e) => {
   else if (a === 'recheck') { const h = el.dataset.h; el.disabled = true; inspectSite(h).then((i) => { S.info[h] = { ...(S.info[h] || {}), ...i }; delete S.info[h].home; save(); rerender(); toast(i.ok ? h + ' is online' : h + ': ' + i.error); }); }
   else if (a === 'findsubs') scanSubs(el.dataset.h);
   else if (a === 'addsubs') { const h = el.dataset.h, have = new Set(allSites().map((s) => s.d)); (S.info[h].subs || []).filter((s) => !have.has(s.h)).forEach((s) => { S.manual.push(s.h); subInfo(s.h); }); save(); rerender(); toast('Subdomains added'); }
+  else if (a === 'applyrange') { const s = document.getElementById('cS').value, e2 = document.getElementById('cE').value; if (!s || !e2 || s > e2) return toast('Pick a start date before the end date'); S.preset = 'custom'; S.cStart = s; S.cEnd = e2; save(); rerender(); }
   else if (a === 'genreport') genReport();
   else if (a === 'copyai') { navigator.clipboard.writeText(reportMd()).then(() => toast('Copied, paste it into any AI')); }
   else if (a === 'dlmd') { const b = new Blob([reportMd()], { type: 'text/markdown' }), l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = 'report.md'; l.click(); }
