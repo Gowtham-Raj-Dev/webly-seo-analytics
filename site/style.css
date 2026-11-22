@@ -241,3 +241,8 @@ textarea.input{font-family:inherit}
 .dsite a span{min-width:0}
 .dsite a b,.dsite a small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dsearch{position:sticky;top:0;z-index:2;height:34px;margin-bottom:6px}
+
+.ndot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--bad)}
+.ndot.ok{background:var(--ok);box-shadow:0 0 0 3px var(--okbg)}
+.ndot.warn{background:var(--warn)}
+.ndot.off{box-shadow:0 0 0 3px var(--badbg)}

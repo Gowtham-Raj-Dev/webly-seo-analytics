@@ -215,7 +215,7 @@ const route = () => (location.hash.replace(/^#\/?/, '').split('?')[0].split('/')
 const toolId = () => location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[1] || '';
 
 function shell(r) {
-  const nav = NAV.map((n) => n[0] === 'H' ? `<h6>${n[1]}</h6>` : `<a href="#/${n[0]}" class="${r === n[0] ? 'on' : ''}">${I(n[1])}<span>${n[2]}</span>${n[3] ? `<em class="pill" style="font-style:normal">${n[3] === '8' ? '8' : (S.conn[n[3]] || S.demo ? '&#9679;' : '&#9675;')}</em>` : ''}</a>`).join('');
+  const nav = NAV.map((n) => n[0] === 'H' ? `<h6>${n[1]}</h6>` : `<a href="#/${n[0]}" class="${r === n[0] ? 'on' : ''}">${I(n[1])}<span>${n[2]}</span>${n[3] ? `<em class="pill" style="font-style:normal">${n[3] === '8' ? '8' : `<i class="ndot ${S.demo || (S.conn[n[3]] && PX.has(n[3])) ? 'ok' : S.conn[n[3]] ? 'warn' : 'off'}" title="${S.demo || (S.conn[n[3]] && PX.has(n[3])) ? 'Connected' : S.conn[n[3]] ? 'Reconnect needed' : 'Not connected'}"></i>`}</em>` : ''}</a>`).join('');
   const sites = enabled(), cur = S.site === 'all' ? null : sites.find((s) => s.d === S.site);
   const tt = TITLES[r] || TITLES[''], showCtl = ['', 'analytics', 'search', 'adsense'].includes(r);
   const nm = S.demo ? 'Demo user' : (S.user && S.user.name) || 'You', em = S.demo ? 'demo data' : (S.user && S.user.email) || '';
