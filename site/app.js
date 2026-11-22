@@ -3,9 +3,10 @@
 const BRAND = { name: 'Webly', host: 'webly.codelove.in' };
 
 /* ---------- state ---------- */
-const S = { theme: 'light', demo: false, conn: { ga: false, gsc: false, ads: false }, site: 'all', range: 28, kpi: 'users', off: {}, manual: [], user: null };
+const S = { theme: 'light', demo: false, conn: { ga: false, gsc: false, ads: false }, site: 'all', range: 28, kpi: 'users', off: {}, manual: [], info: {}, user: null };
 try { const o = JSON.parse(localStorage.getItem('pulse_state3') || '{}'); delete o.user; Object.assign(S, o); } catch (e) { /* ignore */ }
-const save = () => { try { const { user, ...o } = S; localStorage.setItem('pulse_state3', JSON.stringify(o)); } catch (e) { /* ignore */ } };
+S.info = S.info || {}; Object.values(S.info).forEach((i) => { delete i.scanning; });
+const save = () => { try { const { user, ...o } = S; localStorage.setItem('pulse_state3', JSON.stringify(o, (k, v) => (k === 'home' ? undefined : v))); } catch (e) { /* ignore */ } };
 document.documentElement.dataset.theme = S.theme;
 const X = {};            // extra data for the current route (real mode)
 let DIRLIST = null, MINE = new Set(), DIRERR = '';
@@ -59,6 +60,69 @@ function allSites() {
 }
 const enabled = () => allSites().filter((s) => !S.off[s.d]);
 const activeSites = () => enabled().filter((s) => S.site === 'all' || S.site === s.d);
+
+/* ---------- site check: exists? favicon, title, subdomains ---------- */
+const COMMON_SUBS = ['www', 'blog', 'app', 'api', 'docs', 'shop', 'store', 'mail', 'dev', 'staging', 'beta', 'admin', 'portal', 'help', 'support', 'status', 'cdn', 'static', 'assets', 'media', 'm', 'learn', 'news', 'forum', 'community', 'go', 'my', 'dashboard', 'web', 'download', 'downloads', 'play', 'games', 'tools', 'video', 'videos', 'apps', 'tv', 'cloud', 'auth', 'login', 'models', 'music', 'photos', 'jobs', 'careers', 'events', 'academy', 'courses', 'free', 'pro', 'online'];
+const rootOf = (h) => { const p = h.split('.'), two = ['co.uk', 'com.au', 'co.in', 'org.in', 'net.in', 'com.br', 'co.jp', 'co.nz', 'co.za', 'org.uk', 'com.sg', 'com.my', 'ac.in', 'gov.in']; return p.length > 2 && two.includes(p.slice(-2).join('.')) ? p.slice(-3).join('.') : p.slice(-2).join('.'); };
+const validHostName = (h) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(h);
+const cleanHost = (v) => String(v || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[\/?#].*$/, '').replace(/^www\./, '');
+async function doh(name) { try { const r = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=A`, { headers: { accept: 'application/dns-json' } }); const j = await r.json(); return j.Status === 0 && (j.Answer || []).length > 0; } catch (e) { return null; } }
+/** Does the site exist and answer? Returns title, description, favicon, status, speed, https. */
+async function inspectSite(host) {
+  let r = await TL.grab(`https://${host}/`), https = true;
+  if (!r.status) { r = await TL.grab(`http://${host}/`); https = false; }
+  if (!r.status) return { ok: false, error: r.error === 'timeout' ? 'The site took too long to answer.' : 'The site could not be reached.' };
+  const d = new DOMParser().parseFromString(r.text || '', 'text/html'), q = (s) => d.querySelector(s);
+  const href = (q('link[rel~="icon" i]') || q('link[rel="shortcut icon" i]') || q('link[rel~="apple-touch-icon" i]') || {}).href;
+  let icon = ''; const raw = (q('link[rel~="icon" i]') || q('link[rel="shortcut icon" i]') || q('link[rel~="apple-touch-icon" i]'));
+  if (raw) { try { icon = new URL(raw.getAttribute('href'), r.url).href; } catch (e) { icon = ''; } }
+  if (!icon) icon = `https://${host}/favicon.ico`;
+  const meta = q('meta[name="description" i]');
+  return { ok: true, status: r.status, ms: r.ms, https: https && /^https:/i.test(r.url), title: (d.title || '').trim().slice(0, 120), desc: meta ? (meta.getAttribute('content') || '').trim().slice(0, 200) : '', icon, at: Date.now(), home: r.text ? r.text.slice(0, 400000) : '' };
+}
+/** Subdomains of the site's main domain: links on the site, sitemap, certificate logs, common names in DNS. */
+async function findSubs(host, homeText) {
+  const root = rootOf(host), cand = new Map();
+  const add = (h, src) => { h = String(h || '').toLowerCase().replace(/^\*\./, ''); if (h && h !== host && h !== root && h !== 'www.' + root && h.endsWith('.' + root) && /^[a-z0-9.-]+$/.test(h) && !cand.has(h)) cand.set(h, src); };
+  const re = new RegExp('(?:https?:)?//([a-z0-9.-]+\\.' + root.replace(/\./g, '\\.') + ')', 'gi');
+  const scan = (txt, src) => { for (const m of (txt || '').matchAll(re)) add(m[1], src); };
+  scan(homeText, 'link on the site');
+  const [sm, crt, wild] = await Promise.all([TL.grab(`https://${host}/sitemap.xml`), TL.grab(`https://crt.sh/?q=%25.${root}&output=json`), doh(`webly-${Math.random().toString(36).slice(2, 10)}.${root}`)]);
+  if (sm.ok) scan(sm.text, 'sitemap');
+  if (crt.ok && crt.text) { try { JSON.parse(crt.text).forEach((c) => String(c.name_value || '').split('\n').forEach((n) => add(n, 'certificate'))); } catch (e) { /* ignore */ } }
+  if (!wild) await TL.pool(COMMON_SUBS.map((s) => `${s}.${root}`), 8, async (h) => { if (await doh(h)) add(h, 'DNS'); }).done;
+  const list = [...cand].slice(0, 60), out = [];
+  await TL.pool(list, 6, async ([h, src]) => { const r = await TL.grab(`https://${h}/`, 'head'); if (r.status) out.push({ h, status: r.status, ms: r.ms, src }); }).done;
+  return out.sort((a, b) => a.h.localeCompare(b.h));
+}
+async function scanSubs(host) {
+  const i = S.info[host] || {}; S.info[host] = i; i.scanning = true; rerender();
+  try {
+    if (!i.ok) Object.assign(i, await inspectSite(host));
+    i.subs = await findSubs(host, i.home); i.scanned = Date.now();
+  } catch (e) { i.subs = i.subs || []; }
+  delete i.scanning; delete i.home; save(); rerender(); toast(`${i.subs.length} subdomain${i.subs.length === 1 ? '' : 's'} found for ${host}`);
+}
+/** Add a website: it must answer, then we fetch its favicon and look for subdomains. Returns the host or ''. */
+async function addSiteFlow(raw) {
+  const h = cleanHost(raw);
+  if (!validHostName(h)) { toast('Enter a domain like example.com'); return ''; }
+  if (allSites().some((s) => s.d === h)) { toast(`${h} is already in your list`); return h; }
+  toast(`Checking ${h}...`);
+  const info = await inspectSite(h);
+  if (!info.ok) { toast(`${h}: ${info.error} Check the spelling.`); return ''; }
+  S.manual.push(h); S.info[h] = info; save(); rerender(); toast(`${h} found. Looking for subdomains...`);
+  scanSubs(h); return h;
+}
+const statusTag = (i) => i.status >= 200 && i.status < 400 ? `<span class="tag ok">Online${i.ms ? ' · ' + i.ms + ' ms' : ''}</span>` : `<span class="tag bad">HTTP ${i.status}</span>`;
+function siteDetail(host) {
+  const i = S.info[host], have = new Set(allSites().map((s) => s.d));
+  if (!i) return `<div class="sdet"><button class="btn o sm" data-act="findsubs" data-h="${esc(host)}">Check site and find subdomains</button></div>`;
+  const subs = i.subs || [], todo = subs.filter((s) => !have.has(s.h)), root = rootOf(host);
+  return `<div class="sdet">${i.title || i.desc ? `<div class="sub" style="margin-bottom:8px">${esc(i.title || '')}${i.desc ? ' - ' + esc(i.desc) : ''}</div>` : ''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${i.ok ? statusTag(i) : ''}${i.ok ? (i.https ? '<span class="tag ok">HTTPS</span>' : '<span class="tag bad">No HTTPS</span>') : ''}${i.scanning ? '<span class="sub"><span class="spin"></span> Looking for subdomains...</span>' : (i.scanned ? `<span class="tag mute">${subs.length} subdomain${subs.length === 1 ? '' : 's'}</span>` : '')}<button class="btn o sm" data-act="recheck" data-h="${esc(host)}">Re-check</button><button class="btn o sm" data-act="findsubs" data-h="${esc(host)}">Find subdomains</button>${todo.length > 1 ? `<button class="btn p sm" data-act="addsubs" data-h="${esc(host)}">Add all ${todo.length}</button>` : ''}</div>
+    ${subs.length ? `<div class="subs">${subs.map((s) => `<div class="sub-chip">${fav(mk(s.h))}<b>${esc(s.h.slice(0, -(root.length + 1)))}</b><span class="tag ${s.status < 400 ? 'ok' : 'warn'}">${s.status}</span><span class="sub">${esc(s.src)}</span>${have.has(s.h) ? '<span class="sub">added</span>' : `<button class="btn p sm" data-addsub="${esc(s.h)}">Add</button>`}</div>`).join('')}</div>` : ''}</div>`;
+}
 
 /* ---------- metrics ---------- */
 function series(key, days, base, vol = .25, trend = .6) {
@@ -131,7 +195,7 @@ function donut(items) {
 }
 const PAL = ['#4f46e5', '#0891b2', '#db2777', '#d97706', '#16a34a', '#7c3aed'];
 const delta = (d) => `<span class="dl ${d >= 0 ? 'up' : 'dn'}">${d >= 0 ? '&#9650;' : '&#9660;'} ${Math.abs(d).toFixed(1)}%</span>`;
-const fav = (s) => `<span class="fav" style="background:${s.c}">${esc(s.n[0])}</span>`;
+const fav = (s) => { const i = S.info[s.d], src = (i && i.icon) || `https://www.google.com/s2/favicons?domain=${encodeURIComponent(s.d)}&sz=64`; return `<span class="fav" style="background:${s.c}">${esc(s.n[0])}<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></span>`; };
 const kpiTile = (l, v, d, ic) => `<div class="card kpi c3"><div class="kh"><span class="tile">${I(ic, 16)}</span>${d == null ? '' : delta(d)}</div><div class="v">${v}</div><div class="l">${l}</div></div>`;
 const kpis = (a) => `<div class="c12 bento kpis" style="grid-column:span 12">${a.join('')}</div>`;
 const none = (k, t) => `<div class="card c12 empty"><div style="width:48px;height:48px;border-radius:12px;background:var(--card2);display:grid;place-items:center;margin:0 auto 12px;color:var(--a2)">${I('plug', 24)}</div><h3 style="font-size:17px">Connect ${t} to see this</h3><p style="margin:6px 0 16px">One Google sign-in, read-only access. You can disconnect any time.</p><button class="btn p" data-act="connect" data-k="${k}">Connect ${t}</button></div>`;
@@ -200,7 +264,7 @@ function onboarding() {
   const src = [['ga', 'Google Analytics', 'Visitors, pages, sources and devices', '#d97706', 'chart'], ['gsc', 'Search Console', 'Keywords, positions and sitemaps', '#4f46e5', 'search'], ['ads', 'AdSense', 'Earnings and site approval', '#16a34a', 'dollar']];
   return `<div class="card hero c12"><div><h2>Welcome${nm ? ', ' + esc(nm) : ''}</h2><p>Let's set up your dashboard. Connect the Google products you use, or add a website and start with the tools right away.</p></div></div>`
     + src.map((c) => `<div class="card conn c4"><span class="logo2" style="background:${c[3]}">${I(c[4], 22)}</span><div><h3>${c[1]}</h3><div class="sub">${c[2]}</div></div><button class="btn p" data-act="connect" data-k="${c[0]}">${I('plug', 16)} Connect ${c[1]}</button></div>`).join('')
-    + `<div class="card c7"><div class="ch"><h3>Add a website</h3></div><p class="sub" style="margin-bottom:12px">Works with all 8 tools. No Google account needed.</p><div style="display:flex;gap:8px"><input class="input" id="addSite" placeholder="example.com"><button class="btn p" data-act="addsite">Add website</button></div>${sites.length ? `<div class="list" style="margin-top:14px">${sites.map((s) => `<div class="li">${fav(s)}<div class="t"><b>${esc(s.d)}</b></div><a class="btn o sm" href="#/tools/health?site=${encodeURIComponent(s.d)}">Check health</a><a class="btn o sm" href="#/tools/broken?site=${encodeURIComponent(s.d)}">Broken links</a></div>`).join('')}</div>` : ''}</div>`
+    + `<div class="card c7"><div class="ch"><h3>Add a website</h3></div><p class="sub" style="margin-bottom:12px">Works with all 8 tools. No Google account needed.</p><div style="display:flex;gap:8px"><input class="input" id="addSite" placeholder="example.com"><button class="btn p" data-act="addsite">Add website</button></div>${sites.length ? `<div class="list" style="margin-top:14px">${sites.map((s) => `<div class="li" style="flex-wrap:wrap">${fav(s)}<div class="t"><b>${esc(s.d)}</b></div><a class="btn o sm" href="#/tools/health?site=${encodeURIComponent(s.d)}">Check health</a><a class="btn o sm" href="#/tools/broken?site=${encodeURIComponent(s.d)}">Broken links</a>${siteDetail(s.d)}</div>`).join('')}</div>` : ''}</div>`
     + `<div class="card c5"><div class="ch"><h3>Run a tool now</h3></div><div class="list">${TL.list.filter((t) => ['health', 'broken', 'speed', 'checker'].includes(t.id)).map((t) => `<a class="li" href="#/tools/${t.id}"><span class="rank">${I(t.i, 16)}</span><div class="t"><b>${t.n}</b><span>${t.d}</span></div>${I('arrow', 15)}</a>`).join('')}</div></div>`;
 }
 V[''] = () => {
@@ -298,7 +362,7 @@ V.connect = () => {
   const n = connCount(), sites = allSites();
   return `<div class="card c12"><div class="steps"><span class="step ${signed() ? 'ok' : 'on'}"><i>${signed() ? I('ok', 13) : 1}</i>Sign in</span><hr><span class="step ${n || S.demo ? 'ok' : 'on'}"><i>${n || S.demo ? I('ok', 13) : 2}</i>Connect Google</span><hr><span class="step ${sites.length ? 'ok' : ''}"><i>${sites.length ? I('ok', 13) : 3}</i>Pick sites</span><hr><span class="step"><i>4</i>First report</span></div></div>`
     + cards.map((c) => `<div class="card conn c4 ${S.conn[c[0]] ? 'done' : ''}"><span class="logo2" style="background:${c[3]}">${I(c[4], 22)}</span><div><h3>${c[1]}</h3><div class="sub">${c[2]}</div></div><ul>${c[5].map((x) => `<li>${x}</li>`).join('')}</ul>${S.conn[c[0]] ? `<div style="display:flex;gap:8px;align-items:center"><span class="tag ok" style="flex:1;justify-content:center;padding:8px">${I('ok', 14)} Connected${PX.has(c[0]) ? '' : ' (expired)'}</span>${PX.has(c[0]) ? '' : `<button class="btn p sm" data-act="connect" data-k="${c[0]}">Reconnect</button>`}<button class="btn o sm" data-act="disconnect" data-k="${c[0]}">Disconnect</button></div>` : `<button class="btn p" data-act="connect" data-k="${c[0]}">${I('plug', 16)} Connect with Google</button>`}</div>`).join('')
-    + `<div class="card c12"><div class="ch"><div><h3>Your sites</h3><div class="sub">Found in your Google accounts. "Show on home page" lists a site in the public ${BRAND.name} directory for free promotion. You can turn it off any time.</div></div></div>${sites.length ? `<div class="list">${sites.map((s) => { const pub = MINE.has(s.d), can = (s.verified || S.demo) && !s.manual; return `<div class="li" style="flex-wrap:wrap">${fav(s)}<div class="t"><b>${esc(s.d)}</b><span>${[s.ga && 'Analytics', s.gsc && 'Search Console', s.ads && 'AdSense', s.manual && 'added by hand'].filter(Boolean).join(' · ') || 'Demo site'}</span></div><label class="sw" title="Show this site in the dashboard"><input type="checkbox" data-sitetoggle="${esc(s.d)}" ${S.off[s.d] ? '' : 'checked'}><i></i><span>In dashboard</span></label><label class="sw ${can ? '' : 'dis'}" title="${can ? 'Free promotion on the home page' : 'Only sites found in your Google account can be promoted'}"><input type="checkbox" data-pub="${esc(s.d)}" ${pub ? 'checked' : ''} ${can ? '' : 'disabled'}><i></i><span>Show on home page</span></label>${s.manual ? `<button class="btn o sm" data-rm="${esc(s.d)}">Remove</button>` : ''}</div>`; }).join('')}</div>` : '<p class="empty">No sites yet. Connect Google above, or add one by hand below.</p>'}
+    + `<div class="card c12"><div class="ch"><div><h3>Your sites</h3><div class="sub">Found in your Google accounts. "Show on home page" lists a site in the public ${BRAND.name} directory for free promotion. You can turn it off any time.</div></div></div>${sites.length ? `<div class="list">${sites.map((s) => { const pub = MINE.has(s.d), can = (s.verified || S.demo) && !s.manual; return `<div class="li" style="flex-wrap:wrap">${fav(s)}<div class="t"><b>${esc(s.d)}</b><span>${[s.ga && 'Analytics', s.gsc && 'Search Console', s.ads && 'AdSense', s.manual && 'added by hand'].filter(Boolean).join(' · ') || 'Demo site'}</span></div><label class="sw" title="Show this site in the dashboard"><input type="checkbox" data-sitetoggle="${esc(s.d)}" ${S.off[s.d] ? '' : 'checked'}><i></i><span>In dashboard</span></label><label class="sw ${can ? '' : 'dis'}" title="${can ? 'Free promotion on the home page' : 'Only sites found in your Google account can be promoted'}"><input type="checkbox" data-pub="${esc(s.d)}" ${pub ? 'checked' : ''} ${can ? '' : 'disabled'}><i></i><span>Show on home page</span></label>${s.manual ? `<button class="btn o sm" data-rm="${esc(s.d)}">Remove</button>` : ''}${siteDetail(s.d)}</div>`; }).join('')}</div>` : '<p class="empty">No sites yet. Connect Google above, or add one by hand below.</p>'}
       <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap"><input class="input" id="addSite" placeholder="Add a site by hand: example.com" style="flex:1;min-width:220px"><button class="btn p" data-act="addsite">${I('plus', 16)} Add site</button></div><p class="sub" style="margin-top:8px">Sites added by hand work with all tools. They cannot be promoted because ownership is not proven.</p></div>`;
 };
 
@@ -398,6 +462,7 @@ document.addEventListener('click', async (e) => {
   if ((el = q('[data-pub]'))) { const h = el.dataset.pub; if (el.checked) { el.checked = false; promoteDialog(h); } else { try { await DIR.unpublish(h); MINE.delete(h); DIRLIST = null; toast('Removed from the home page'); } catch (er) { el.checked = true; toast(er.message); } } return; }
   if ((el = q('[data-rm]'))) { S.manual = S.manual.filter((d) => d !== el.dataset.rm); save(); rerender(); return; }
   if ((el = q('[data-viewrep]'))) { const r = hist()[+el.dataset.viewrep]; if (r) { showReport(r); document.getElementById('rep').scrollIntoView({ behavior: 'smooth' }); } return; }
+  if ((el = q('[data-addsub]'))) { const h = el.dataset.addsub; if (!S.manual.includes(h)) S.manual.push(h); save(); rerender(); inspectSite(h).then((i) => { if (i.ok) { S.info[h] = { ...(S.info[h] || {}), ...i }; delete S.info[h].home; save(); rerender(); } }); return; }
   if (!(el = q('[data-act]'))) return;
   const a = el.dataset.act;
   if (a === 'login') { try { toast('Opening Google...'); await DIR.signIn(); } catch (er) { toast(er.code === 'auth/popup-closed-by-user' ? 'Sign-in cancelled' : er.message); } }
@@ -407,7 +472,10 @@ document.addEventListener('click', async (e) => {
   else if (a === 'disconnect') { const k = el.dataset.k; PX.forget(k); S.conn[k] = false; loadKey = ''; save(); rerender(); }
   else if (a === 'demo') { S.demo = true; save(); location.hash = '#/'; render(); toast('Demo data loaded'); }
   else if (a === 'close') { document.getElementById('ov').classList.remove('open'); }
-  else if (a === 'addsite') { const i = document.getElementById('addSite'), h = i.value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, ''); if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(h)) return toast('Enter a domain like example.com'); if (!S.manual.includes(h)) S.manual.push(h); save(); rerender(); toast('Site added'); }
+  else if (a === 'addsite') { const inp = document.getElementById('addSite'); el.disabled = true; addSiteFlow(inp ? inp.value : '').then(() => { el.disabled = false; }); }
+  else if (a === 'recheck') { const h = el.dataset.h; el.disabled = true; inspectSite(h).then((i) => { S.info[h] = { ...(S.info[h] || {}), ...i }; delete S.info[h].home; save(); rerender(); toast(i.ok ? h + ' is online' : h + ': ' + i.error); }); }
+  else if (a === 'findsubs') scanSubs(el.dataset.h);
+  else if (a === 'addsubs') { const h = el.dataset.h, have = new Set(allSites().map((s) => s.d)); (S.info[h].subs || []).filter((s) => !have.has(s.h)).forEach((s) => S.manual.push(s.h)); save(); rerender(); toast('Subdomains added'); }
   else if (a === 'genreport') genReport();
   else if (a === 'copyai') { navigator.clipboard.writeText(reportMd()).then(() => toast('Copied, paste it into any AI')); }
   else if (a === 'dlmd') { const b = new Blob([reportMd()], { type: 'text/markdown' }), l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = 'report.md'; l.click(); }
@@ -415,8 +483,7 @@ document.addEventListener('click', async (e) => {
 window.addEventListener('hashchange', render);
 setInterval(() => { const n = document.getElementById('liveN'); if (n && S.demo) n.textContent = Math.max(3, +n.textContent + Math.round((Math.random() - .5) * 4)); }, 3500);
 
-function addSite(raw) { const h = String(raw || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, ''); if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(h)) return ''; if (!S.manual.includes(h) && !allSites().some((s) => s.d === h)) { S.manual.push(h); save(); } return h; }
-window.UI = { I, fav, esc, fmt, toast, sites: enabled, keywords: keywordsFor, addSite, rerender: () => rerender() };
+window.UI = { I, fav, esc, fmt, toast, sites: enabled, keywords: keywordsFor, addSite: addSiteFlow, rerender: () => rerender() };
 (async () => {
   try { await DIR.onUser((u) => { const had = !!S.user; S.user = u; if (u && !had) { render.mine = false; loadMine(); } render(); }); } catch (e) { /* offline: demo still works */ }
   render();
