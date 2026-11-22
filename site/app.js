@@ -92,7 +92,7 @@ async function findSubs(host, homeText) {
   if (crt.ok && crt.text) { try { JSON.parse(crt.text).forEach((c) => String(c.name_value || '').split('\n').forEach((n) => add(n, 'certificate'))); } catch (e) { /* ignore */ } }
   if (!wild) await TL.pool(COMMON_SUBS.map((s) => `${s}.${root}`), 8, async (h) => { if (await doh(h)) add(h, 'DNS'); }).done;
   const list = [...cand].slice(0, 60), out = [];
-  await TL.pool(list, 6, async ([h, src]) => { const r = await TL.grab(`https://${h}/`, 'head'); if (r.status) out.push({ h, status: r.status, ms: r.ms, src }); }).done;
+  await TL.pool(list, 5, async ([h, src]) => { const r = await inspectSite(h); if (r.ok) out.push({ h, status: r.status, ms: r.ms, src, icon: r.icon, title: r.title, desc: r.desc, https: r.https }); }).done;
   return out.sort((a, b) => a.h.localeCompare(b.h));
 }
 async function scanSubs(host) {
@@ -111,17 +111,24 @@ async function addSiteFlow(raw) {
   toast(`Checking ${h}...`);
   const info = await inspectSite(h);
   if (!info.ok) { toast(`${h}: ${info.error} Check the spelling.`); return ''; }
-  S.manual.push(h); S.info[h] = info; save(); rerender(); toast(`${h} found. Looking for subdomains...`);
-  scanSubs(h); return h;
+  S.manual.push(h); S.info[h] = info; save(); rerender(); const root = h === rootOf(h); toast(root ? `${h} found. Looking for subdomains...` : `${h} found`);
+  if (root) scanSubs(h); return h;
+}
+function subInfo(h) { for (const p of Object.values(S.info)) { const s = (p.subs || []).find((x) => x.h === h); if (s) { S.info[h] = { ok: true, status: s.status, ms: s.ms, https: s.https !== false, title: s.title || '', desc: s.desc || '', icon: s.icon || '', at: Date.now() }; return; } } }
+const autoSeen = new Set();
+async function autoInfo() {
+  const todo = allSites().filter((s) => !S.info[s.d] && !autoSeen.has(s.d)).slice(0, 15); if (!todo.length) return; todo.forEach((s) => autoSeen.add(s.d));
+  await TL.pool(todo, 3, async (s) => { const i = await inspectSite(s.d); delete i.home; S.info[s.d] = i; }).done; save();
+  if (['', 'connect'].includes(route())) rerender();
 }
 const statusTag = (i) => i.status >= 200 && i.status < 400 ? `<span class="tag ok">Online${i.ms ? ' · ' + i.ms + ' ms' : ''}</span>` : `<span class="tag bad">HTTP ${i.status}</span>`;
 function siteDetail(host) {
   const i = S.info[host], have = new Set(allSites().map((s) => s.d));
-  if (!i) return `<div class="sdet"><button class="btn o sm" data-act="findsubs" data-h="${esc(host)}">Check site and find subdomains</button></div>`;
+  const isRoot = host === rootOf(host);
   const subs = i.subs || [], todo = subs.filter((s) => !have.has(s.h)), root = rootOf(host);
   return `<div class="sdet">${i.title || i.desc ? `<div class="sub" style="margin-bottom:8px">${esc(i.title || '')}${i.desc ? ' - ' + esc(i.desc) : ''}</div>` : ''}
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${i.ok ? statusTag(i) : ''}${i.ok ? (i.https ? '<span class="tag ok">HTTPS</span>' : '<span class="tag bad">No HTTPS</span>') : ''}${i.scanning ? '<span class="sub"><span class="spin"></span> Looking for subdomains...</span>' : (i.scanned ? `<span class="tag mute">${subs.length} subdomain${subs.length === 1 ? '' : 's'}</span>` : '')}<button class="btn o sm" data-act="recheck" data-h="${esc(host)}">Re-check</button><button class="btn o sm" data-act="findsubs" data-h="${esc(host)}">Find subdomains</button>${todo.length > 1 ? `<button class="btn p sm" data-act="addsubs" data-h="${esc(host)}">Add all ${todo.length}</button>` : ''}</div>
-    ${subs.length ? `<div class="subs">${subs.map((s) => `<div class="sub-chip">${fav(mk(s.h))}<b>${esc(s.h.slice(0, -(root.length + 1)))}</b><span class="tag ${s.status < 400 ? 'ok' : 'warn'}">${s.status}</span><span class="sub">${esc(s.src)}</span>${have.has(s.h) ? '<span class="sub">added</span>' : `<button class="btn p sm" data-addsub="${esc(s.h)}">Add</button>`}</div>`).join('')}</div>` : ''}</div>`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${i.ok ? statusTag(i) : ''}${i.ok ? (i.https ? '<span class="tag ok">HTTPS</span>' : '<span class="tag bad">No HTTPS</span>') : ''}${i.scanning ? '<span class="sub"><span class="spin"></span> Looking for subdomains...</span>' : (i.scanned ? `<span class="tag mute">${subs.length} subdomain${subs.length === 1 ? '' : 's'}</span>` : '')}<button class="btn o sm" data-act="recheck" data-h="${esc(host)}">Re-check</button>${isRoot ? `<button class="btn o sm" data-act="findsubs" data-h="${esc(host)}">Find subdomains</button>` : ''}${todo.length > 1 ? `<button class="btn p sm" data-act="addsubs" data-h="${esc(host)}">Add all ${todo.length}</button>` : ''}</div>
+    ${subs.length ? `<div class="subs">${subs.map((s) => `<div class="sub-chip">${fav(mk(s.h), s.icon)}<b>${esc(s.h.slice(0, -(root.length + 1)))}</b><span class="tag ${s.status < 400 ? 'ok' : 'warn'}">${s.status}</span><span class="sub">${esc(s.src)}</span>${have.has(s.h) ? '<span class="sub">added</span>' : `<button class="btn p sm" data-addsub="${esc(s.h)}">Add</button>`}</div>`).join('')}</div>` : ''}</div>`;
 }
 
 /* ---------- metrics ---------- */
@@ -195,7 +202,7 @@ function donut(items) {
 }
 const PAL = ['#4f46e5', '#0891b2', '#db2777', '#d97706', '#16a34a', '#7c3aed'];
 const delta = (d) => `<span class="dl ${d >= 0 ? 'up' : 'dn'}">${d >= 0 ? '&#9650;' : '&#9660;'} ${Math.abs(d).toFixed(1)}%</span>`;
-const fav = (s) => { const i = S.info[s.d], src = (i && i.icon) || `https://www.google.com/s2/favicons?domain=${encodeURIComponent(s.d)}&sz=64`; return `<span class="fav" style="background:${s.c}">${esc(s.n[0])}<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></span>`; };
+const fav = (s, icon) => { const i = S.info[s.d], g = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(s.d)}&sz=64`, src = icon || (i && i.icon) || g; return `<span class="fav" style="background:${s.c}">${esc(s.n[0])}<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-g="${esc(g)}" onerror="if(this.dataset.g&&this.src!==this.dataset.g){this.src=this.dataset.g}else{this.remove()}"></span>`; };
 const kpiTile = (l, v, d, ic) => `<div class="card kpi c3"><div class="kh"><span class="tile">${I(ic, 16)}</span>${d == null ? '' : delta(d)}</div><div class="v">${v}</div><div class="l">${l}</div></div>`;
 const kpis = (a) => `<div class="c12 bento kpis" style="grid-column:span 12">${a.join('')}</div>`;
 const none = (k, t) => `<div class="card c12 empty"><div style="width:48px;height:48px;border-radius:12px;background:var(--card2);display:grid;place-items:center;margin:0 auto 12px;color:var(--a2)">${I('plug', 24)}</div><h3 style="font-size:17px">Connect ${t} to see this</h3><p style="margin:6px 0 16px">One Google sign-in, read-only access. You can disconnect any time.</p><button class="btn p" data-act="connect" data-k="${k}">Connect ${t}</button></div>`;
@@ -215,7 +222,7 @@ function shell(r) {
   return `<div class="shell"><aside class="side"><div class="brand"><span class="logo">${I('pulse')}</span>${BRAND.name}</div><nav class="nav">${nav}</nav>
     <div class="upgrade"><b>${S.demo ? 'Demo mode' : connCount() + '/3 connected'}</b><small>${S.demo ? 'Showing sample numbers.' : connCount() === 3 ? 'All sources are live.' : 'Connect the rest to unlock every report.'}</small><br><button data-go="connect">${S.demo ? 'Use my data' : connCount() === 3 ? 'Manage' : 'Connect now'}</button></div></aside>
     <main class="main"><div class="top"><div class="title"><h1>${tt[0]}</h1><p>${tt[1]}</p></div>
-      ${showCtl ? `<div class="menu" id="mSite"><button class="ctl" data-menu="mSite">${cur ? fav(cur) : `<span class="fav" style="background:var(--a1)">${I('globe', 15)}</span>`}<span>${cur ? esc(cur.n) : 'All sites'}</span>${I('chev', 16)}</button><div class="drop"><a data-site="all" class="${S.site === 'all' ? 'on' : ''}"><span class="fav" style="background:var(--a1)">${I('globe', 15)}</span>All sites</a>${sites.map((s) => `<a data-site="${esc(s.d)}" class="${S.site === s.d ? 'on' : ''}">${fav(s)}<span><b style="display:block">${esc(s.n)}</b><small style="color:var(--tx3)">${esc(s.d)}</small></span></a>`).join('')}</div></div>
+      ${showCtl ? `<div class="menu" id="mSite"><button class="ctl" data-menu="mSite">${cur ? fav(cur) : `<span class="fav" style="background:var(--a1)">${I('globe', 15)}</span>`}<span>${cur ? esc(cur.n) : 'All sites'}</span>${I('chev', 16)}</button><div class="drop dsite">${sites.length > 6 ? '<input class="input dsearch" placeholder="Search sites..." data-dsearch autocomplete="off">' : ''}<a data-site="all" class="${S.site === 'all' ? 'on' : ''}"><span class="fav" style="background:var(--a1)">${I('globe', 15)}</span>All sites</a>${sites.map((s) => `<a data-site="${esc(s.d)}" class="${S.site === s.d ? 'on' : ''}">${fav(s)}<span><b style="display:block">${esc(s.n)}</b><small style="color:var(--tx3)">${esc(s.d)}</small></span></a>`).join('')}</div></div>
       <div class="seg">${[7, 28, 90].map((d) => `<button data-range="${d}" class="${S.range === d ? 'on' : ''}">${d}d</button>`).join('')}</div>` : ''}
       <button class="ctl icon" data-act="theme" title="Theme">${I(S.theme === 'dark' ? 'sun' : 'moon')}</button>
       <div class="menu" id="mUser"><button class="avatar" data-menu="mUser">${esc(nm[0].toUpperCase())}</button><div class="drop"><div style="padding:10px 12px"><b>${esc(nm)}</b><br><small style="color:var(--tx3)">${esc(em)}</small></div><button data-act="logout">${I('logout', 18)} Sign out</button></div></div></div>
@@ -446,6 +453,7 @@ async function render() {
   else v.innerHTML = V[key]();
   bindCharts(); window.scrollTo(0, ks ? y : 0);
   if (key === 'explore') loadDir();
+  if (key === '' || key === 'connect') autoInfo();
   if (key === 'connect' && S.user && !render.mine) { render.mine = true; loadMine().then(() => { if (route() === 'connect') rerender(); }); }
 }
 const rerender = () => { render.keepScroll = true; render(); };
@@ -462,7 +470,7 @@ document.addEventListener('click', async (e) => {
   if ((el = q('[data-pub]'))) { const h = el.dataset.pub; if (el.checked) { el.checked = false; promoteDialog(h); } else { try { await DIR.unpublish(h); MINE.delete(h); DIRLIST = null; toast('Removed from the home page'); } catch (er) { el.checked = true; toast(er.message); } } return; }
   if ((el = q('[data-rm]'))) { S.manual = S.manual.filter((d) => d !== el.dataset.rm); save(); rerender(); return; }
   if ((el = q('[data-viewrep]'))) { const r = hist()[+el.dataset.viewrep]; if (r) { showReport(r); document.getElementById('rep').scrollIntoView({ behavior: 'smooth' }); } return; }
-  if ((el = q('[data-addsub]'))) { const h = el.dataset.addsub; if (!S.manual.includes(h)) S.manual.push(h); save(); rerender(); inspectSite(h).then((i) => { if (i.ok) { S.info[h] = { ...(S.info[h] || {}), ...i }; delete S.info[h].home; save(); rerender(); } }); return; }
+  if ((el = q('[data-addsub]'))) { const h = el.dataset.addsub; if (!S.manual.includes(h)) S.manual.push(h); subInfo(h); save(); rerender(); return; }
   if (!(el = q('[data-act]'))) return;
   const a = el.dataset.act;
   if (a === 'login') { try { toast('Opening Google...'); await DIR.signIn(); } catch (er) { toast(er.code === 'auth/popup-closed-by-user' ? 'Sign-in cancelled' : er.message); } }
@@ -475,11 +483,12 @@ document.addEventListener('click', async (e) => {
   else if (a === 'addsite') { const inp = document.getElementById('addSite'); el.disabled = true; addSiteFlow(inp ? inp.value : '').then(() => { el.disabled = false; }); }
   else if (a === 'recheck') { const h = el.dataset.h; el.disabled = true; inspectSite(h).then((i) => { S.info[h] = { ...(S.info[h] || {}), ...i }; delete S.info[h].home; save(); rerender(); toast(i.ok ? h + ' is online' : h + ': ' + i.error); }); }
   else if (a === 'findsubs') scanSubs(el.dataset.h);
-  else if (a === 'addsubs') { const h = el.dataset.h, have = new Set(allSites().map((s) => s.d)); (S.info[h].subs || []).filter((s) => !have.has(s.h)).forEach((s) => S.manual.push(s.h)); save(); rerender(); toast('Subdomains added'); }
+  else if (a === 'addsubs') { const h = el.dataset.h, have = new Set(allSites().map((s) => s.d)); (S.info[h].subs || []).filter((s) => !have.has(s.h)).forEach((s) => { S.manual.push(s.h); subInfo(s.h); }); save(); rerender(); toast('Subdomains added'); }
   else if (a === 'genreport') genReport();
   else if (a === 'copyai') { navigator.clipboard.writeText(reportMd()).then(() => toast('Copied, paste it into any AI')); }
   else if (a === 'dlmd') { const b = new Blob([reportMd()], { type: 'text/markdown' }), l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = 'report.md'; l.click(); }
 });
+document.addEventListener('input', (e) => { const i = e.target.closest('[data-dsearch]'); if (!i) return; const v = i.value.trim().toLowerCase(); i.parentElement.querySelectorAll('a[data-site]').forEach((a) => { a.style.display = a.dataset.site === 'all' || a.dataset.site.includes(v) || a.textContent.toLowerCase().includes(v) ? '' : 'none'; }); });
 window.addEventListener('hashchange', render);
 setInterval(() => { const n = document.getElementById('liveN'); if (n && S.demo) n.textContent = Math.max(3, +n.textContent + Math.round((Math.random() - .5) * 4)); }, 3500);
 

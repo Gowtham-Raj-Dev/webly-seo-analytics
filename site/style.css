@@ -235,3 +235,9 @@ textarea.input{font-family:inherit}
 .sub-chip .fav{width:20px;height:20px;border-radius:5px;font-size:10px}
 
 .subs{max-height:300px;overflow:auto;padding-right:4px}
+
+.dsite{width:300px;max-height:min(440px,72vh);overflow-y:auto;overscroll-behavior:contain}
+.dsite a{padding:7px 10px}
+.dsite a span{min-width:0}
+.dsite a b,.dsite a small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsearch{position:sticky;top:0;z-index:2;height:34px;margin-bottom:6px}
