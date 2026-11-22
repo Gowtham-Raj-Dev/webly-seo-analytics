@@ -493,7 +493,18 @@ window.addEventListener('hashchange', render);
 setInterval(() => { const n = document.getElementById('liveN'); if (n && S.demo) n.textContent = Math.max(3, +n.textContent + Math.round((Math.random() - .5) * 4)); }, 3500);
 
 window.UI = { I, fav, esc, fmt, toast, sites: enabled, keywords: keywordsFor, addSite: addSiteFlow, rerender: () => rerender() };
+// Remember who was signed in, so a refresh shows the dashboard at once (Firebase confirms a moment later).
+try { const c = JSON.parse(localStorage.getItem('webly_user') || 'null'); if (c && c.uid) S.user = c; } catch (e) { /* ignore */ }
 (async () => {
-  try { await DIR.onUser((u) => { const had = !!S.user; S.user = u; if (u && !had) { render.mine = false; loadMine(); } render(); }); } catch (e) { /* offline: demo still works */ }
-  render();
+  if (signed()) render(); else document.getElementById('app').innerHTML = '<div style="min-height:100vh;display:grid;place-items:center"><span class="spin" style="width:22px;height:22px"></span></div>';
+  let first = true;
+  try {
+    await DIR.onUser((u) => {
+      const had = !!S.user; S.user = u;
+      try { if (u) localStorage.setItem('webly_user', JSON.stringify(u)); else localStorage.removeItem('webly_user'); } catch (e) { /* ignore */ }
+      if (u && (!had || first)) { render.mine = false; loadMine(); }
+      if (first || had !== !!u || !u) render();
+      first = false;
+    });
+  } catch (e) { if (!signed()) render(); }
 })();
