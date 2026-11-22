@@ -121,11 +121,14 @@
 
   /* ---------- shared bits ---------- */
   const mySites = () => U().sites();
-  const picker = (id, cur) => `<select class="input" id="${id}" style="width:auto;min-width:220px">${mySites().map((s) => `<option value="${esc(s.d)}"${s.d === cur ? ' selected' : ''}>${esc(s.d)}</option>`).join('')}</select>`;
-  const noSites = (el) => { el.innerHTML = `<div class="card c12 empty"><h3>No sites yet</h3><p style="margin:6px 0 14px">Connect Google or add a site in Connections first.</p><a class="btn p" href="#/connect">Go to Connections</a></div>`; };
+  const normHost = (v) => String(v || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
+  const validHost = (h) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(h);
+  const picker = (id, cur) => `<form class="pick" data-pick="${id}"><input class="input" id="${id}" list="siteList" value="${esc(cur || '')}" placeholder="example.com" style="width:220px"><datalist id="siteList">${mySites().map((s) => `<option value="${esc(s.d)}">`).join('')}</datalist><button class="btn p sm" type="submit">Check</button></form>`;
+  const wirePick = (el, id, fn) => { const f = el.querySelector(`[data-pick="${id}"]`); if (f) f.onsubmit = (e) => { e.preventDefault(); const h = normHost(f.querySelector('input').value); if (!validHost(h)) return U().toast('Enter a domain like example.com'); fn(h); }; };
+  const noSites = (el, again, single) => { el.innerHTML = `<div class="card c12 empty"><h3>Which website?</h3><p style="margin:6px 0 14px">Type any domain to check.${single ? '' : ' It is added to your sites.'}</p><form class="pick" id="askF" style="justify-content:center"><input class="input" id="askH" placeholder="example.com" style="max-width:260px"><button class="btn p" type="submit">Continue</button></form></div>`; el.querySelector('#askF').onsubmit = (e) => { e.preventDefault(); const h = normHost(el.querySelector('#askH').value); if (!validHost(h)) return U().toast('Enter a domain like example.com'); if (single) setSiteQ(h); else U().addSite(h); again(el); }; };
   const head = (t, extra = '') => `<div class="card c12"><div class="ch" style="margin:0;flex-wrap:wrap"><a href="#/tools" class="btn o sm">&larr; Tools</a><h3 style="font-size:16px">${t}</h3><span class="sp" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${extra}</span></div></div>`;
   const siteFromHash = () => new URLSearchParams(location.hash.split('?')[1] || '').get('site');
-  const pickSite = () => { const l = mySites(), w = siteFromHash(); return (l.find((s) => s.d === w) || l[0] || {}).d; };
+  const pickSite = () => { const w = normHost(siteFromHash()); if (validHost(w)) return w; const l = mySites(); return l[0] ? l[0].d : ''; };
   const setSiteQ = (host) => { const base = location.hash.split('?')[0]; history.replaceState(null, '', `${base}?site=${encodeURIComponent(host)}`); };
 
   const R = {}; // tool renderers: (el) => void|cleanup
@@ -142,7 +145,7 @@
       return a;
   }
   R.health = (el) => {
-    const sites = mySites(); if (!sites.length) return noSites(el);
+    const sites = mySites(); if (!sites.length) return noSites(el, R.health);
     const run = async (host) => {
       const box = $(`[data-h="${host}"]`, el); box.querySelector('.res').innerHTML = '<span class="spin"></span>';
       healthRes.set(host, await healthOf(host)); draw(host);
@@ -162,9 +165,9 @@
   /* ---- Page checker ---- */
   const pageRes = new Map();
   R.checker = async (el) => {
-    const host = pickSite(); if (!host) return noSites(el);
+    const host = pickSite(); if (!host) return noSites(el, R.checker, true);
     el.innerHTML = head('Page checker', picker('pcSite', host) + '<button class="btn p sm" id="pcAll" disabled>Check all pages</button>') + '<div class="card c12" id="pcBody"><p class="sub"><span class="spin"></span> Reading the sitemap...</p></div>';
-    $('#pcSite', el).onchange = (e) => { setSiteQ(e.target.value); R.checker(el); };
+    wirePick(el, 'pcSite', (h) => { setSiteQ(h); R.checker(el); });
     const { urls, total, from } = await sitePages(host); if (!el.isConnected) return;
     const check = async (u) => { const row = $(`[data-u="${CSS.escape(u)}"]`, el); row.querySelector('.res').innerHTML = '<span class="spin"></span>'; const r = await grab(u); const a = audit(r); a.title = a.d.title; pageRes.set(u, a); drawRow(u); };
     const drawRow = (u) => { const a = pageRes.get(u), row = $(`[data-u="${CSS.escape(u)}"]`, el); if (!a || !row) return; const bad = a.C.filter((c) => c.lvl !== 'ok').length; row.querySelector('.res').innerHTML = `${scoreTag(a.score)} <span class="sub">${bad} issue${bad === 1 ? '' : 's'}</span>`; row.querySelector('.tt').textContent = a.title || ''; };
@@ -181,10 +184,10 @@
   /* ---- Broken links ---- */
   let blState = null;
   R.broken = async (el) => {
-    const host = pickSite(); if (!host) return noSites(el);
+    const host = pickSite(); if (!host) return noSites(el, R.broken, true);
     el.innerHTML = head('Broken links', picker('blSite', host) + '<label class="sub" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="blExt" ' + (store.get('pulse_bl_ext') === '0' ? '' : 'checked') + '> check other websites too</label><button class="btn p sm" id="blGo" disabled>Check all links</button>')
       + '<div class="card c12"><b id="blInfo"><span class="spin"></span> Reading the sitemap...</b><div class="sub">Scans every page, follows every link and image, and shows each broken one with the page it is on.</div></div><div id="blOut" class="c12" style="grid-column:span 12;display:grid;gap:16px"></div>';
-    $('#blSite', el).onchange = (e) => { setSiteQ(e.target.value); R.broken(el); };
+    wirePick(el, 'blSite', (h) => { setSiteQ(h); R.broken(el); });
     $('#blExt', el).onchange = (e) => store.set('pulse_bl_ext', e.target.checked ? '1' : '0');
     const { urls, total, from } = await sitePages(host); if (!el.isConnected) return;
     $('#blInfo', el).textContent = `${num(urls.length)} page${urls.length === 1 ? '' : 's'} to scan (from ${from}${total > urls.length ? `, first ${urls.length} of ${total}` : ''})`;
@@ -226,7 +229,7 @@
   const upKey = 'pulse_uptime';
   const upData = () => { try { return JSON.parse(store.get(upKey) || '{}'); } catch { return {}; } };
   R.uptime = (el) => {
-    const sites = mySites(); if (!sites.length) return noSites(el);
+    const sites = mySites(); if (!sites.length) return noSites(el, R.uptime);
     const draw = () => {
       const data = upData(), cut = Date.now() - 864e5;
       $('#upBody', el).innerHTML = `<table><tr><th>Site</th><th>Status</th><th class="n">Response</th><th class="n">Last 24h</th><th>History</th><th class="n">Checked</th></tr>${sites.map((s) => {
@@ -250,10 +253,10 @@
 
   /* ---- Rank tracker ---- */
   R.rank = async (el) => {
-    const host = pickSite(); if (!host) return noSites(el);
+    const host = pickSite(); if (!host) return noSites(el, R.rank, true);
     const tk = 'pulse_targets_' + host, targets = () => { try { return JSON.parse(store.get(tk) || '[]'); } catch { return []; } };
     el.innerHTML = head('Rank tracker', picker('rkSite', host)) + '<div class="card c12"><p class="sub"><span class="spin"></span> Reading Google Search Console...</p></div>';
-    $('#rkSite', el).onchange = (e) => { setSiteQ(e.target.value); R.rank(el); };
+    wirePick(el, 'rkSite', (h) => { setSiteQ(h); R.rank(el); });
     let rows; try { rows = await U().keywords(host); } catch (e) { if (el.isConnected) el.querySelector('.card:last-child').innerHTML = `<div class="empty"><h3>Search Console needed</h3><p style="margin:6px 0 14px">${esc(e.message)}</p><a class="btn p" href="#/connect">Open Connections</a></div>`; return; }
     if (!el.isConnected) return;
     const find = (k) => rows.find((r) => r.q.toLowerCase() === k.toLowerCase());
@@ -271,9 +274,9 @@
 
   /* ---- PageSpeed ---- */
   R.speed = (el) => {
-    const host = pickSite(); if (!host) return noSites(el);
+    const host = pickSite(); if (!host) return noSites(el, R.speed, true);
     el.innerHTML = head('PageSpeed', picker('psSite', host)) + `<div class="card c12"><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="psUrl" value="https://${esc(host)}/" style="flex:1;min-width:240px"><button class="btn p" id="psGo">Test mobile + desktop</button></div><p class="sub" style="margin-top:8px">Uses Google PageSpeed Insights (Lighthouse). Takes about 20 seconds.</p></div><div id="psOut" class="c12" style="grid-column:span 12;display:grid;gap:16px"></div>`;
-    $('#psSite', el).onchange = (e) => { $('#psUrl', el).value = `https://${e.target.value}/`; };
+    wirePick(el, 'psSite', (h) => { $('#psUrl', el).value = `https://${h}/`; });
     const run = async (url, strategy) => {
       const cats = ['performance', 'accessibility', 'best-practices', 'seo'].map((c) => 'category=' + c).join('&');
       const r = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=${strategy}&${cats}`);
@@ -303,7 +306,7 @@
 
   /* ---- Quick links ---- */
   R.links = (el) => {
-    const sites = mySites();
+    const sites = mySites(); if (!sites.length) return noSites(el, R.links);
     el.innerHTML = head('Quick links') + (sites.length ? sites.map((s) => `<div class="card c4"><div class="site" style="margin-bottom:12px">${U().fav(s)}${esc(s.d)}</div><div style="display:flex;gap:8px;flex-wrap:wrap">${[['Search Console', `https://search.google.com/search-console?resource_id=${encodeURIComponent('sc-domain:' + s.d.split('.').slice(-2).join('.'))}`], ['PageSpeed', `https://pagespeed.web.dev/analysis?url=https://${s.d}`], ['Rich results test', `https://search.google.com/test/rich-results?url=https://${s.d}`], ['Mobile friendly', `https://search.google.com/test/mobile-friendly?url=https://${s.d}`], ['site: search', `https://www.google.com/search?q=site:${s.d}`], ['sitemap.xml', `https://${s.d}/sitemap.xml`], ['Open site', `https://${s.d}`]].map((l) => `<a class="btn o sm" href="${l[1]}" target="_blank" rel="noopener">${l[0]}</a>`).join('')}</div></div>`).join('') : '') + (sites.length ? '' : '<div class="card c12 empty"><p>Connect Google first.</p></div>') + '<div class="card c12"><div class="ch"><h3>Google consoles</h3></div><div style="display:flex;gap:8px;flex-wrap:wrap">' + [['Analytics', 'https://analytics.google.com'], ['Search Console', 'https://search.google.com/search-console'], ['AdSense', 'https://adsense.google.com'], ['Tag Manager', 'https://tagmanager.google.com'], ['Google Trends', 'https://trends.google.com']].map((l) => `<a class="btn o sm" href="${l[1]}" target="_blank" rel="noopener">${l[0]}</a>`).join('') + '</div></div>';
   };
 

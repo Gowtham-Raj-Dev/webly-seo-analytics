@@ -224,3 +224,6 @@ textarea.input{font-family:inherit}
 .foot{grid-column:1/-1;display:flex;gap:18px;flex-wrap:wrap;padding:20px 64px 40px;color:var(--tx3);font-size:12.5px}
 .foot a{color:var(--tx2)}
 @media(max-width:900px){.foot{padding:16px 16px 90px}}
+
+.pick{display:flex;gap:6px;align-items:center}
+.pick .input{height:34px}
