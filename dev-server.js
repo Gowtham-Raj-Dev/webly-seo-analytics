@@ -3,7 +3,7 @@
    Run: node dev-server.js */
 const http = require('http'), fs = require('fs'), path = require('path'), dns = require('dns').promises, net = require('net');
 const ROOT = path.join(__dirname, 'site'), PORT = process.env.PORT || 5500;
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.txt': 'text/plain' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json', '.txt': 'text/plain', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.xml': 'application/xml' };
 
 const isPrivateIp = (ip) => {
   if (net.isIPv6(ip)) return ip === '::1' || /^(fc|fd|fe80)/i.test(ip) || /^::ffff:(10|127|169\.254|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(ip);

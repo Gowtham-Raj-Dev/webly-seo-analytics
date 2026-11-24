@@ -245,8 +245,8 @@ const none = (k, t) => `<div class="card c12 empty"><div style="width:48px;heigh
 const NAMES = { ga: 'Google Analytics', gsc: 'Search Console', ads: 'AdSense' };
 
 /* ---------- shell ---------- */
-const NAV = [['', 'home', 'Overview'], ['analytics', 'chart', 'Analytics', 'ga'], ['search', 'search', 'Search Console', 'gsc'], ['adsense', 'dollar', 'AdSense', 'ads'], ['H', 'Workspace'], ['tools', 'tools', 'Tools', '9'], ['reports', 'file', 'Reports'], ['H', 'Account'], ['connect', 'plug', 'Connections']];
-const TITLES = { '': ['Overview', 'Everything about your sites, in one place'], analytics: ['Analytics', 'Visitors from Google Analytics'], search: ['Search Console', 'How you show up on Google'], adsense: ['AdSense', 'Your earnings and site approval'], tools: ['Tools', '9 helpers that audit your sites and generate problem fixes'], reports: ['Reports', 'One click report you can read or hand to an AI'], connect: ['Connections', 'Link your Google account and choose sites'], explore: ['Explore sites', `Websites that chose to be shown on ${BRAND.name}`] };
+const NAV = [['', 'home', 'Overview'], ['visitors', 'pulse', 'Webly Analytics', 'live'],['analytics', 'chart', 'Analytics', 'ga'], ['search', 'search', 'Search Console', 'gsc'], ['adsense', 'dollar', 'AdSense', 'ads'], ['H', 'Workspace'], ['tools', 'tools', 'Tools', '9'], ['reports', 'file', 'Reports'], ['H', 'Account'], ['connect', 'plug', 'Connections']];
+const TITLES = { '': ['Overview', 'Everything about your sites, in one place'], visitors: ['Webly Analytics', 'Real-time visitors from your own Webly tag'], analytics: ['Analytics', 'Visitors from Google Analytics'], search: ['Search Console', 'How you show up on Google'], adsense: ['AdSense', 'Your earnings and site approval'], tools: ['Tools', '9 helpers that audit your sites and generate problem fixes'], reports: ['Reports', 'One click report you can read or hand to an AI'], connect: ['Connections', 'Link your Google account and choose sites'], explore: ['Explore sites', `Websites that chose to be shown on ${BRAND.name}`] };
 const route = () => (location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0]) || '';
 const toolId = () => location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[1] || '';
 
@@ -255,7 +255,7 @@ function rangePicker() {
   return `<div class="menu" id="mRange"><button class="ctl" data-menu="mRange">${I('cal', 16)}<span>${rg.name}</span><span class="sub" style="font-weight:500">${rg.text}</span>${I('chev', 16)}</button><div class="drop drange">${PRESETS.filter((p) => p[0] !== 'custom').map((p) => `<a data-preset="${p[0]}" class="${rg.preset === p[0] ? 'on' : ''}">${p[1]}</a>`).join('')}<div class="dcustom"><div class="sub" style="margin-bottom:6px">Custom range</div><div class="drow"><input type="date" id="cS" value="${rg.start}" max="${rg.today}"><input type="date" id="cE" value="${rg.end}" max="${rg.today}"></div><button class="btn p sm" data-act="applyrange" style="margin-top:8px">Apply</button></div><label class="sw" style="padding:10px"><input type="checkbox" data-compare ${S.compare ? 'checked' : ''}><i></i><span>Compare with previous period</span></label></div></div>`;
 }
 function shell(r) {
-  const nav = NAV.map((n) => n[0] === 'H' ? `<h6>${n[1]}</h6>` : `<a href="#/${n[0]}" class="${r === n[0] ? 'on' : ''}">${I(n[1])}<span>${n[2]}</span>${n[3] ? `<em class="pill" style="font-style:normal">${/^\d+$/.test(n[3]) ? n[3] : `<i class="ndot ${S.demo || (S.conn[n[3]] && PX.has(n[3])) ? 'ok' : S.conn[n[3]] ? 'warn' : 'off'}" title="${S.demo || (S.conn[n[3]] && PX.has(n[3])) ? 'Connected' : S.conn[n[3]] ? 'Reconnect needed' : 'Not connected'}"></i>`}</em>` : ''}</a>`).join('');
+  const nav = NAV.map((n) => n[0] === 'H' ? `<h6>${n[1]}</h6>` : `<a href="#/${n[0]}" class="${r === n[0] ? 'on' : ''}">${I(n[1])}<span>${n[2]}</span>${n[3] ? `<em class="pill" style="font-style:normal">${/^\d+$/.test(n[3]) ? n[3] : n[3] === 'live' ? '<span class="nlive">live</span>' : `<i class="ndot ${S.demo || (S.conn[n[3]] && PX.has(n[3])) ? 'ok' : S.conn[n[3]] ? 'warn' : 'off'}" title="${S.demo || (S.conn[n[3]] && PX.has(n[3])) ? 'Connected' : S.conn[n[3]] ? 'Reconnect needed' : 'Not connected'}"></i>`}</em>` : ''}</a>`).join('');
   const sites = enabled(), cur = S.site === 'all' ? null : sites.find((s) => s.d === S.site);
   const tt = TITLES[r] || TITLES[''], showCtl = ['', 'analytics', 'search', 'adsense'].includes(r);
   const nm = S.demo ? 'Demo user' : (S.user && S.user.name) || 'You', em = S.demo ? 'demo data' : (S.user && S.user.email) || '';
@@ -263,7 +263,7 @@ function shell(r) {
     ${(() => { const st = Object.keys(S.conn).filter((k) => S.conn[k] && !PX.has(k)).length; return `<div class="upgrade"><b>${S.demo ? 'Demo mode' : st ? 'Session ended' : connCount() + '/3 connected'}</b><small>${S.demo ? 'Showing sample numbers.' : st ? 'Reconnect to load fresh numbers.' : connCount() === 3 ? 'All sources are live.' : 'Connect the rest to unlock every report.'}</small><br><button data-go="connect">${S.demo ? 'Use my data' : st ? 'Reconnect' : connCount() === 3 ? 'Manage' : 'Connect now'}</button></div>`; })()}</aside>
     <main class="main"><div class="top"><div class="title"><h1>${tt[0]}</h1><p>${tt[1]}</p></div>
       ${showCtl ? `<div class="menu" id="mSite"><button class="ctl" data-menu="mSite">${cur ? fav(cur) : `<span class="fav" style="background:var(--a1)">${I('globe', 15)}</span>`}<span>${cur ? esc(cur.n) : 'All sites'}</span>${I('chev', 16)}</button><div class="drop dsite">${sites.length > 6 ? '<input class="input dsearch" placeholder="Search sites..." data-dsearch autocomplete="off">' : ''}<a data-site="all" class="${S.site === 'all' ? 'on' : ''}"><span class="fav" style="background:var(--a1)">${I('globe', 15)}</span>All sites</a>${sites.map((s) => `<a data-site="${esc(s.d)}" class="${S.site === s.d ? 'on' : ''}">${fav(s)}<span><b style="display:block">${esc(s.n)}</b><small style="color:var(--tx3)">${esc(s.d)}</small></span></a>`).join('')}</div></div>
-      ${rangePicker()}` : ''}
+      ` : ''}${showCtl || r === 'visitors' ? rangePicker() : ''}
       <button class="ctl icon" data-act="theme" title="Theme">${I(S.theme === 'dark' ? 'sun' : 'moon')}</button>
       <div class="menu" id="mUser"><button class="avatar" data-menu="mUser">${esc(nm[0].toUpperCase())}</button><div class="drop"><div style="padding:10px 12px"><b>${esc(nm)}</b><br><small style="color:var(--tx3)">${esc(em)}</small></div><button data-act="logout">${I('logout', 18)} Sign out</button></div></div></div>
     <div id="banner"></div><div id="view" class="bento"></div></main></div>`;
@@ -289,6 +289,7 @@ function banner() {
 function bestGsc() { const c = activeSites().filter((s) => PX.R.gscMap && PX.R.gscMap[s.d]).sort((a, b) => siteTotal('clicks', b.d) - siteTotal('clicks', a.d)); return c[0] && c[0].d; }
 async function prefetch(r) {
   for (const k of Object.keys(X)) delete X[k];
+  if (r === '' && S.user && !S.demo) await loadTags();
   if (!real()) return;
   const hosts = activeSites().map((s) => s.d), sf = (p) => p.catch((e) => { X.err = e; return null; });
   if (r === '') {
@@ -368,7 +369,69 @@ V[''] = () => {
   const dash = '<span class="sub">&mdash;</span>';
   const table = `<div class="card ov-card c12"><div class="ch"><h3>Your sites</h3><span class="sp sub">${sites.length} site${sites.length === 1 ? '' : 's'}</span></div>${sites.length ? `<div style="overflow:auto"><table><tr><th>Site</th>${cc.ga ? '<th class="n">Visitors</th>' : ''}${cc.gsc ? '<th class="n">Clicks</th>' : ''}${cc.ads ? '<th class="n">Earnings</th>' : ''}<th></th></tr>${sites.map((s) => `<tr class="h"><td><span class="site">${fav(s)}<span>${esc(s.n)}<br><small style="color:var(--tx3);font-weight:500">${esc(s.d)}</small></span></span></td>${cc.ga ? `<td class="n">${ok.ga ? fmt(siteTotal('users', s.d)) : dash}</td>` : ''}${cc.gsc ? `<td class="n">${ok.gsc ? fmt(siteTotal('clicks', s.d)) : dash}</td>` : ''}${cc.ads ? `<td class="n">${ok.ads ? money(siteTotal('rev', s.d)) : dash}</td>` : ''}<td class="n"><a class="btn o sm" href="#/tools/audit?site=${encodeURIComponent(s.d)}">Audit</a> <a class="btn o sm" href="#/tools/health?site=${encodeURIComponent(s.d)}">Health</a></td></tr>`).join('')}</table></div>` : `<div class="empty"><p style="margin-bottom:12px">No sites found yet.</p><button class="btn p sm" data-go="connect">Add a site</button></div>`}</div>`;
 
-  return hero + strip + (kpOn.length ? kpiRow : '') + chart + live + todoCard + kwCard + table;
+  const waPromo = TAGS && !TAGS.length && !S.demo ? `<div class="card c12 wa-promo"><span class="ov-ic" style="--c:#16a34a">${I('pulse', 18)}</span><div><b>See visitors in real time with Webly Analytics</b><span>Google Analytics can take hours to update. Add one line of code to your site and see who is on it right now.</span></div><a class="btn p" href="#/visitors">Get my tag ${I('arrow', 15)}</a></div>` : '';
+  return hero + strip + waPromo + (kpOn.length ? kpiRow : '') + chart + live + todoCard + kwCard + table;
+};
+
+/* ---------- Webly Analytics: our own tag (w.js) on the user's site, real time, no Google needed ---------- */
+let TAGS = null, TAGERR = '';
+async function loadTags(force) {
+  if (TAGS && !force) return TAGS;
+  if (!S.user || S.demo) { TAGS = []; return TAGS; }
+  try { TAGS = await DIR.tagSites(); TAGERR = ''; } catch (e) { TAGS = []; TAGERR = e.code === 'permission-denied' ? 'Webly Analytics is not switched on yet: the database rules still have to be published.' : e.message; }
+  return TAGS;
+}
+const tagSnippet = (t) => `<script defer src="https://${BRAND.host}/w.js" data-site="${t.id}" data-tz="${t.tz}"></script>`;
+const dk = (k) => { try { return decodeURIComponent(k); } catch (e) { return k; } };
+const durS = (s) => { s = Math.round(s || 0); return s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor(s % 3600 / 60)}m` : s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`; };
+/** Add up the day docs of one or more tagged sites. */
+function aggDays(docs) {
+  const A = { t: { v: 0, u: 0, n: 0, s: 0, sec: 0, c: 0 }, p: {}, r: {}, dev: {}, br: {}, tz: {}, h: {}, clk: {}, byDay: {}, live: 0, livePages: {} }, now = Date.now();
+  docs.forEach((d) => {
+    const t = d.t || {}; for (const k in A.t) A.t[k] += +t[k] || 0;
+    const bd = A.byDay[d.day] || (A.byDay[d.day] = { u: 0, v: 0 }); bd.u += +t.u || 0; bd.v += +t.v || 0;
+    for (const [pk, pv] of Object.entries(d.p || {})) { const x = A.p[pk] || (A.p[pk] = { v: 0, u: 0, sec: 0, c: 0, ti: '' }); x.v += +pv.v || 0; x.u += +pv.u || 0; x.sec += +pv.sec || 0; x.c += +pv.c || 0; if (pv.ti) x.ti = pv.ti; }
+    ['r', 'dev', 'br', 'tz', 'h', 'clk'].forEach((m) => { for (const [k, v] of Object.entries(d[m] || {})) A[m][k] = (A[m][k] || 0) + (+v || 0); });
+    for (const l of Object.values(d.live || {})) { const ms = l && l.t && (l.t.toMillis ? l.t.toMillis() : Date.parse(l.t)); if (ms && now - ms < 3 * 60 * 1000) { A.live++; const p = l.p || '/'; A.livePages[p] = (A.livePages[p] || 0) + 1; } }
+  });
+  return A;
+}
+const waIntro = () => `<div class="card ov-hero wa-hero c12"><div class="ov-hl"><span class="ov-date">Webly Analytics</span><h2>See who is on your site right now</h2><p>Google Analytics reports can take hours, sometimes 24 to 48 hours, to fill in. With the Webly tag, every visit shows up here within a minute: live visitors, pages, sources, devices and time on page.</p></div><ul class="lp-list wa-pts"><li>${I('bolt', 16)}Live in seconds, not hours</li><li>${I('copy', 16)}One line of code, any website</li><li>${I('eye', 16)}No cookies, no Google account needed</li><li>${I('chart', 16)}Pages, sources, devices, time and clicks</li></ul></div>`;
+function waSetup(docs) {
+  const tagged = new Set(TAGS.map((t) => t.host)), cand = allSites().filter((s) => !tagged.has(s.d));
+  const status = (t) => docs.some((d) => d.sid === t.id) ? `<span class="tag ok">${I('ok', 12)} Receiving data</span>` : '<span class="tag warn">Waiting for the first visit</span>';
+  return `<div class="card c12 wa-setup"><div class="ch"><div><h3>${TAGS.length ? 'Your Webly tags' : 'Get your Webly tag'}</h3><div class="sub">Paste the tag on every page of your site, just before &lt;/head&gt;. One tag per website. Visits show up here within a minute.</div></div></div>
+    ${TAGS.map((t) => `<div class="wa-tag"><div class="wa-th">${fav(mk(t.host))}<div><b>${esc(t.host)}</b>${status(t)}</div><button class="btn p sm" data-act="tagcopy" data-id="${t.id}">${I('copy', 14)} Copy tag</button><button class="ob-link" data-act="tagdel" data-id="${t.id}">Remove</button></div><pre class="wa-code">${esc(tagSnippet(t))}</pre></div>`).join('')}
+    <form class="wa-add" onsubmit="event.preventDefault();this.querySelector('button').click()"><div class="ov-in">${I('globe', 16)}<input id="tagHost" list="tagHosts" placeholder="Your website: example.com" autocomplete="off" value="${TAGS.length ? '' : esc(cand[0] ? cand[0].d : (S.obSite || ''))}"><datalist id="tagHosts">${cand.map((s) => `<option value="${esc(s.d)}">`).join('')}</datalist><button class="btn p" type="button" data-act="tagadd">${I('plus', 15)} ${TAGS.length ? 'Add another site' : 'Get my tag'}</button></div></form></div>`;
+}
+const waRows = (obj, n, f = (k) => esc(dk(k))) => { const e = Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n), mx = Math.max(1, ...e.map((x) => x[1])); return e.length ? `<div class="wa-rows">${e.map(([k, v]) => `<div><span>${f(k)}</span><b>${fmt(v)}</b><em><i style="width:${v / mx * 100}%"></i></em></div>`).join('')}</div>` : '<p class="sub">No data yet.</p>'; };
+const waLiveHtml = (A) => `<div class="live"><span class="pulse"></span><span class="big">${A.live}</span><span class="sub">on your site right now</span></div><div class="list" style="margin-top:12px">${Object.entries(A.livePages).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([p, n]) => `<div class="li"><div class="t"><b>${esc(p)}</b></div><b>${n}</b></div>`).join('') || '<p class="sub">Nobody right now.</p>'}</div>`;
+V.visitors = async () => {
+  if (S.demo) return waIntro() + '<div class="card c12 empty"><p>Sign in with your own Google account to create your Webly tag.</p></div>';
+  await loadTags(true);
+  if (TAGERR) return waIntro() + `<div class="card c12" style="border-color:var(--warn)"><span class="tag warn">Not ready</span> ${esc(TAGERR)}</div>`;
+  if (!TAGS.length) return waIntro() + waSetup([]);
+  const R = RANGE(), pick = TAGS.some((t) => t.id === S.tagSel) ? S.tagSel : 'all', list = pick === 'all' ? TAGS : TAGS.filter((t) => t.id === pick);
+  const docs = (await Promise.all(list.map((t) => DIR.tagDays(t.id, R.start, R.end).then((ds) => ds.map((d) => ({ ...d, sid: t.id }))).catch(() => [])))).flat();
+  const A = aggDays(docs), days = []; for (let d = parseD(R.start); isoD(d) <= R.end; d = addD(d, 1)) days.push(isoD(d));
+  const tiles = [['Live now', fmt(A.live), 'pulse', '#16a34a'], ['Visitors', fmt(A.t.u), 'users', '#6366f1'], ['Page views', fmt(A.t.v), 'eye', '#0891b2'], ['Visits', fmt(A.t.s), 'cursor', '#d97706'], ['Avg. time per visitor', durS(A.t.u ? A.t.sec / A.t.u : 0), 'cal', '#7c3aed'], ['Clicks', fmt(A.t.c), 'spark', '#db2777']];
+  const picker = TAGS.length > 1 ? `<div class="card c12 wa-pick"><button class="${pick === 'all' ? 'on' : ''}" data-act="tagsel" data-id="all">All tagged sites</button>${TAGS.map((t) => `<button class="${pick === t.id ? 'on' : ''}" data-act="tagsel" data-id="${t.id}">${fav(mk(t.host))}${esc(t.host)}</button>`).join('')}</div>` : '';
+  const pages = Object.entries(A.p).sort((a, b) => b[1].v - a[1].v).slice(0, 15);
+  const hours = Array.from({ length: 24 }, (_, i) => A.h[String(i).padStart(2, '0')] || 0), hm = Math.max(1, ...hours);
+  // live box refreshes every 30 s from today's doc only (1 read per site)
+  const iv = setInterval(async () => { const b = document.getElementById('waLive'); if (!b) return clearInterval(iv); try { const ds = (await Promise.all(list.map((t) => DIR.tagDays(t.id, R.today, R.today)))).flat(); b.innerHTML = waLiveHtml(aggDays(ds)); } catch (e) { /* keep last */ } }, 30000);
+  SEC.cleanup = () => clearInterval(iv);
+  return picker
+    + `<div class="ov-kpis c12" style="--n:6">${tiles.map((x) => `<div class="card ov-k wa-k" style="--c:${x[3]}"><div class="kh"><span class="ov-ic">${I(x[2], 16)}</span><span class="l">${x[0]}</span></div><div class="v">${x[1]}</div><div class="ov-kd"><span>${x[0] === 'Live now' ? 'last 3 minutes' : R.name}</span></div></div>`).join('')}</div>`
+    + `<div class="card ov-card c8"><div class="ch"><div><h3>Visitors per day</h3><div class="sub">${R.name} &middot; ${R.text}</div></div></div>${lineChart('wa', [{ n: 'Visitors', c: '#6366f1', v: days.map((d) => (A.byDay[d] || {}).u || 0) }], days.map((d) => parseD(d).toLocaleDateString('en', { month: 'short', day: 'numeric' })), 260)}</div>`
+    + `<div class="card ov-card c4"><div class="ch"><h3>Live now</h3><span class="sp tag ok">real time</span></div><div id="waLive">${waLiveHtml(A)}</div></div>`
+    + `<div class="card ov-card c12"><div class="ch"><h3>Top pages</h3><span class="sp sub">${pages.length} of ${Object.keys(A.p).length}</span></div>${pages.length ? `<div style="overflow:auto"><table><tr><th>Page</th><th class="n">Views</th><th class="n">Visitors</th><th class="n">Avg. time</th><th class="n">Clicks</th></tr>${pages.map(([k, x]) => `<tr class="h"><td><b>${esc(x.ti || dk(k))}</b><br><small style="color:var(--tx3)">${esc(dk(k))}</small></td><td class="n">${fmt(x.v)}</td><td class="n">${fmt(x.u)}</td><td class="n">${durS(x.u ? x.sec / x.u : 0)}</td><td class="n">${fmt(x.c)}</td></tr>`).join('')}</table></div>` : '<p class="sub">No visits in this period yet.</p>'}</div>`
+    + `<div class="card ov-card c4"><div class="ch"><h3>Where visitors come from</h3></div>${waRows(A.r, 8)}</div>`
+    + `<div class="card ov-card c4"><div class="ch"><h3>Devices</h3></div>${waRows(A.dev, 4)}<div class="ch" style="margin-top:18px"><h3>Browsers</h3></div>${waRows(A.br, 5)}</div>`
+    + `<div class="card ov-card c4"><div class="ch"><h3>Visitor time zones</h3></div>${waRows(A.tz, 8, (k) => esc(dk(k).replace(/_/g, ' ')))}</div>`
+    + `<div class="card ov-card c6"><div class="ch"><h3>Busy hours</h3><span class="sp sub">${esc((list[0] || {}).tz || '')}</span></div><div class="mbars wa-hours">${hours.map((v) => `<i style="height:${Math.max(3, v / hm * 100)}%" title="${v}"></i>`).join('')}</div><div class="sub" style="display:flex;justify-content:space-between"><span>00:00</span><span>12:00</span><span>23:00</span></div></div>`
+    + `<div class="card ov-card c6"><div class="ch"><h3>Most clicked</h3></div>${waRows(A.clk, 8)}</div>`
+    + waSetup(docs);
 };
 
 V.analytics = (tab) => SEC.analytics(tab);
@@ -477,7 +540,8 @@ const reportMd = () => `# ${BRAND.name} report · ${new Date(LASTREP.at).toISOSt
 
 /* ---------- login / home (public) ---------- */
 /* Every other CodeLove site, with the standard network labels (same list on every site's footer). */
-const NETWORK = [['CodeLove', 'https://codelove.in'], ['Free 3D Models', 'https://models.codelove.in'], ['Free 3D Games', 'https://games.codelove.in/'], ['Insta Downloader', 'https://downloader.codelove.in'], ['Link in Bio', 'https://linkinbio.codelove.in'], ['Video to GIF', 'https://videotogif.codelove.in'], ['Video to Images', 'https://videotoimages.codelove.in'], ['Free YouTube Automation', 'https://utubeflow.codelove.in'], ['Free Java Games', 'https://javaplay.codelove.in'], ['Video Cut', 'https://videocut.codelove.in'], ['Free AI Video Maker', 'https://videomaker.codelove.in'], ['Apps Store', 'https://apps.codelove.in']];
+// [label, url, logo in /img/net/ (copied from each site, so they always load)]
+const NETWORK = [['CodeLove', 'https://codelove.in', 'codelove.ico'], ['Free 3D Models', 'https://models.codelove.in', 'models.svg'], ['Free 3D Games', 'https://games.codelove.in/', 'games.svg'], ['Insta Downloader', 'https://downloader.codelove.in', 'downloader.svg'], ['Link in Bio', 'https://linkinbio.codelove.in', 'linkinbio.png'], ['Video to GIF', 'https://videotogif.codelove.in', 'videotogif.svg'], ['Video to Images', 'https://videotoimages.codelove.in', 'videotoimages.svg'], ['Free YouTube Automation', 'https://utubeflow.codelove.in', 'utubeflow.svg'], ['Free Java Games', 'https://javaplay.codelove.in', 'javaplay.svg'], ['Video Cut', 'https://videocut.codelove.in', 'videocut.svg'], ['Free AI Video Maker', 'https://videomaker.codelove.in', 'videomaker.svg'], ['Apps Store', 'https://apps.codelove.in', 'apps.svg']];
 const GLOGO = '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3A12 12 0 0 1 12 24a12 12 0 0 1 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 24 4a20 20 0 1 0 19.6 16.1z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8A12 12 0 0 1 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A12 12 0 0 1 12.7 28l-6.5 5A20 20 0 0 0 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.7-.4-3.9z"/></svg>';
 /* ---------- shared parts of the public pages ---------- */
 const LOGO = () => `<span class="logo">${I('pulse')}</span>`;
@@ -485,7 +549,7 @@ const LOGO = () => `<span class="logo">${I('pulse')}</span>`;
 const ctaBtn = (t, next) => signed() ? `<a class="gbtn" href="${next || '/dashboard'}" data-nav>${I('home', 17)} Open your dashboard</a>` : `<button class="gbtn" data-act="login"${next ? ` data-next="${next}"` : ''}>${GLOGO} ${t}</button>`;
 function lpNav() {
   const me = signed(), here = location.pathname, on = (p) => (here === p ? ' class="on"' : '');
-  return `<header class="lp-nav"><div class="lp-navin"><a class="brand" href="/" data-nav style="padding:0">${LOGO()}${BRAND.name}</a><nav><a href="/#lpFeat" data-nav>Features</a><a href="/tools/" data-nav${on('/tools/')}>Tools</a><a href="/sites/" data-nav${on('/sites/')}>Connected sites</a><a href="/#lpHow" data-nav>How it works</a><a href="/#lpFaq" data-nav>FAQ</a></nav><div class="lp-navr"><button class="lp-ic" data-act="theme" aria-label="Switch theme">${I(S.theme === 'dark' ? 'sun' : 'moon', 17)}</button>${me ? `<a class="btn p" href="/dashboard" data-nav>Dashboard ${I('arrow', 15)}</a>` : '<button class="btn p" data-act="login">Sign in</button>'}</div></div></header>`;
+  return `<header class="lp-nav"><div class="lp-navin"><a class="brand" href="/" data-nav style="padding:0">${LOGO()}${BRAND.name}</a><nav><a href="/#lpWa" data-nav>Live analytics</a><a href="/#lpFeat" data-nav>Features</a><a href="/tools/" data-nav${on('/tools/')}>Tools</a><a href="/sites/" data-nav${on('/sites/')}>Connected sites</a><a href="/#lpHow" data-nav>How it works</a><a href="/#lpFaq" data-nav>FAQ</a></nav><div class="lp-navr"><button class="lp-ic" data-act="theme" aria-label="Switch theme">${I(S.theme === 'dark' ? 'sun' : 'moon', 17)}</button>${me ? `<a class="btn p" href="/dashboard" data-nav>Dashboard ${I('arrow', 15)}</a>` : '<button class="btn p" data-act="login">Sign in</button>'}</div></div></header>`;
 }
 const lpEnd = () => `<section class="lp-end"><div class="lp-endin"><h2>See your websites clearly</h2><p>Sign in with Google and get your first report in a minute. Free, read-only, no credit card.</p>${ctaBtn('Get started free')}</div></section>`;
 function lpFoot() {
@@ -494,7 +558,7 @@ function lpFoot() {
     <div><h4>Product</h4><a href="/#lpFeat" data-nav>Features</a><a href="/tools/" data-nav>Free SEO tools</a><a href="/sites/" data-nav>Connected sites</a><a href="/#lpHow" data-nav>How it works</a><a href="/#lpFaq" data-nav>FAQ</a><a href="/dashboard" data-nav>Dashboard</a></div>
     <div><h4>Popular tools</h4>${PAGES.TOOLS.slice(0, 5).map((t) => `<a href="${t.path}" data-nav>${t.name}</a>`).join('')}</div>
     <div><h4>Company</h4><a href="https://codelove.in" target="_blank" rel="noopener">CodeLove Home</a><a href="https://gowtham.codelove.in" target="_blank" rel="noopener">About Gowtham</a><a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms</a></div>
-    <div class="lp-net"><h4>CodeLove network</h4><div>${NETWORK.map((n) => `<a href="${n[1]}" target="_blank" rel="noopener"><img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(n[1].replace(/^https:\/\/|\/$/g, ''))}&sz=32" alt="" width="16" height="16" loading="lazy" onerror="this.remove()">${n[0]}</a>`).join('')}</div></div>
+    <div class="lp-net"><h4>CodeLove network</h4><div>${NETWORK.map((n) => `<a href="${n[1]}" target="_blank" rel="noopener"><img src="/img/net/${n[2]}" alt="" width="18" height="18" loading="lazy" onerror="this.remove()">${n[0]}</a>`).join('')}</div></div>
     <div class="lp-copy"><span>&copy; ${new Date().getFullYear()} ${BRAND.name} by CodeLove. All rights reserved.</span><span class="lp-credit">Built with <i>&hearts;</i> by <a href="https://gowtham.codelove.in" target="_blank" rel="noopener">Gowtham</a> &middot; <a href="https://codelove.in" target="_blank" rel="noopener">CodeLove</a> &middot; <a href="https://wa.me/916369494396" target="_blank" rel="noopener" aria-label="WhatsApp" class="lp-wa"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.2c0-.1-.2-.2-.4-.3z"/></svg></a> <a href="mailto:gowtham@codelove.in">gowtham@codelove.in</a></span></div>
   </footer>`;
 }
@@ -573,8 +637,10 @@ function loginPage() {
   const steps = [['Sign in with Google', 'Takes a few seconds. No credit card, nothing to install.'], ['Connect what you use', 'Analytics, Search Console, AdSense. One click each, read-only.'], ['Get answers', 'See your numbers, run the tools, and read the report that tells you what to fix.']];
   const faqs = [
     [`What is ${BRAND.name}?`, `${BRAND.name} is a free website analytics dashboard and SEO audit tool. It shows Google Analytics, Search Console and AdSense for all your websites on one screen, runs a 30+ point site audit, finds broken links, checks page speed and tracks keyword rankings.`],
-    [`Is ${BRAND.name} free?`, `Yes. Signing in, connecting your Google accounts, the ${nT} tools and the reports are all free. No credit card needed.`],
-    ['Do you store my Google data?', 'No. Your Analytics, Search Console and AdSense numbers are read in your own browser and shown to you. We do not save them on any server.'],
+    ['What is Webly Analytics?', `Webly Analytics is our own free visitor tracker. You add one line of code (the Webly tag) to your website, and ${BRAND.name} shows your visitors, live users, page views, sources, devices and time on page within a minute.`],
+    ['How is Webly Analytics different from Google Analytics?', 'Google Analytics reports can take hours, sometimes 24 to 48 hours, to show your numbers. The Webly tag counts each visit within a minute, uses no cookies and does not need a Google account. You can use both together.'],
+    [`Is ${BRAND.name} free?`, `Yes. Signing in, connecting your Google accounts, Webly Analytics, the ${nT} tools and the reports are all free. No credit card needed.`],
+    ['Do you store my Google data?', 'No. Your Analytics, Search Console and AdSense numbers are read in your own browser and shown to you. We do not save them on any server. Only the visit counts from the Webly tag are saved, and only you can see them.'],
     ['What access does it ask for?', 'Read-only access only. We can see your numbers, but we can never change settings, delete anything or touch your earnings. Disconnect any time.'],
     ['Can I use the tools without Google Analytics?', 'Yes. Sign in, then type any domain into a tool. Connecting Google is optional and only needed for your traffic, search and earnings numbers.'],
     ['How many websites can I add?', 'All the sites in your connected Google accounts show up on their own, and you can add any other domain by hand.']
@@ -603,7 +669,14 @@ function loginPage() {
   </section>
 
   <section class="lp-strip"><span>Works with</span><b>${I('chart')} Google Analytics</b><b>${I('search')} Search Console</b><b>${I('dollar')} AdSense</b><b>${I('bolt')} PageSpeed</b></section>
-  <section class="lp-stats"><div><b>30+</b><span>checks in one site audit</span></div><div><b>${nT}</b><span>free website tools</span></div><div><b>3</b><span>Google products, one screen</span></div><div><b>0</b><span>data stored on our servers</span></div></section>
+  <section class="lp-stats"><div><b>30+</b><span>checks in one site audit</span></div><div><b>${nT}</b><span>free website tools</span></div><div><b>3</b><span>Google products, one screen</span></div><div><b>Live</b><span>visitors with the Webly tag</span></div></section>
+
+  <section class="lp-sec" id="lpWa"><div class="wa-lp"><div class="wa-lpt"><span class="lp-eye">Webly Analytics</span><h2>Google Analytics is slow. See your visitors live.</h2><p>Google Analytics reports can take hours, sometimes 24 to 48 hours, to show your numbers. Put the free Webly tag on your website and every visitor shows up in your dashboard within a minute.</p>
+    <ul class="lp-list"><li>${I('bolt', 16)}Who is on your site right now, and on which page</li><li>${I('chart', 16)}Visitors, page views, time on page, sources and devices</li><li>${I('copy', 16)}One line of code, works on any website</li><li>${I('eye', 16)}No cookies and no Google account needed</li></ul>
+    <div class="lp-cta" style="justify-content:flex-start">${ctaBtn('Get my free tag', '/dashboard#/visitors')}</div></div>
+    <div class="wa-lpv"><div class="card wa-mock"><div class="wa-mh"><span class="lp-dot"></span><b>12</b><span>on your site right now</span><span class="tag ok">live</span></div><div class="wa-ml"><div><span>/blog/best-cake-recipes</span><b>5</b></div><div><span>/</span><b>4</b></div><div><span>/order</span><b>3</b></div></div><div class="wa-mk"><div><small>Visitors today</small><b>486</b></div><div><small>Page views</small><b>1,302</b></div><div><small>Avg. time</small><b>2m 41s</b></div></div></div>
+      <pre class="card wa-code wa-mcode">&lt;script defer src="https://${BRAND.host}/w.js"
+  data-site="your-site-id"&gt;&lt;/script&gt;</pre></div></div></section>
 
   <section class="lp-sec" id="lpFeat"><div class="lp-head"><span class="lp-eye">Features</span><h2>One dashboard instead of five tabs</h2><p>Everything Google knows about your sites, explained in plain words.</p></div>
     <div class="lp-bento">
@@ -714,6 +787,17 @@ document.addEventListener('click', async (e) => {
   else if (a === 'obskip') { S.obSkip[el.dataset.k] = true; save(); rerender(); }
   else if (a === 'obchange') { S.obSite = ''; save(); rerender(); }
   else if (a === 'obdone') { S.onboarded = true; save(); history.replaceState(null, '', '/dashboard'); render(); toast('Your dashboard is ready'); }
+  else if (a === 'tagadd') {
+    const h = cleanHost((document.getElementById('tagHost') || {}).value);
+    if (!validHostName(h)) return toast('Enter a website like example.com');
+    if ((TAGS || []).some((t) => t.host === h)) return toast(`${h} already has a tag`);
+    el.disabled = true; let tz = 'UTC'; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (er) { /* default */ }
+    try { await DIR.addTagSite(h, (S.info[h] && S.info[h].title) || mk(h).n, tz); TAGS = null; toast('Tag created. Copy it into your site.'); rerender(); }
+    catch (er) { el.disabled = false; toast(er.code === 'permission-denied' ? 'Webly Analytics is not switched on yet (database rules not published).' : er.message); }
+  }
+  else if (a === 'tagcopy') { const t = (TAGS || []).find((x) => x.id === el.dataset.id); if (t) navigator.clipboard.writeText(tagSnippet(t)).then(() => toast('Tag copied. Paste it before </head> on every page.')); }
+  else if (a === 'tagdel') { const t = (TAGS || []).find((x) => x.id === el.dataset.id); if (t && confirm(`Remove the Webly tag for ${t.host}? Its numbers will no longer be shown.`)) { try { await DIR.removeTagSite(t.id); TAGS = null; rerender(); toast('Removed'); } catch (er) { toast(er.message); } } }
+  else if (a === 'tagsel') { S.tagSel = el.dataset.id; save(); rerender(); }
   else if (a === 'genreport') genReport();
   else if (a === 'copyai') { navigator.clipboard.writeText(reportMd()).then(() => toast('Copied, paste it into any AI')); }
   else if (a === 'dlmd') { const b = new Blob([reportMd()], { type: 'text/markdown' }), l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = 'report.md'; l.click(); }

@@ -27,6 +27,22 @@
       await db.collection('directory').doc(id(host)).set({ host, name: String(name).slice(0, 60), desc: String(desc || '').slice(0, 160), uid: auth.currentUser.uid, at: Date.now() });
     },
     async unpublish(host) { await init(); await db.collection('directory').doc(id(host)).delete(); },
+
+    /* ---- Webly Analytics: the user's tagged sites (wsites) and their day docs (wsites/{id}/d/{YYYY-MM-DD}) ---- */
+    async tagSites() { await init(); if (!auth.currentUser) return []; const s = await db.collection('wsites').where('uid', '==', auth.currentUser.uid).get(); return s.docs.map((d) => ({ id: d.id, ...d.data() })); },
+    async addTagSite(host, name, tz) {
+      await init(); if (!auth.currentUser) throw new Error('Sign in first.');
+      const a = 'abcdefghijklmnopqrstuvwxyz0123456789', r = crypto.getRandomValues(new Uint8Array(12)), sid = Array.from(r, (x) => a[x % 36]).join('');
+      const doc = { uid: auth.currentUser.uid, host, name: String(name || host).slice(0, 80), tz: String(tz || 'UTC').slice(0, 60), at: Date.now() };
+      await db.collection('wsites').doc(sid).set(doc); return { id: sid, ...doc };
+    },
+    async removeTagSite(sid) { await init(); await db.collection('wsites').doc(sid).delete(); },
+    /** Day docs for one tagged site between two YYYY-MM-DD dates (inclusive). */
+    async tagDays(sid, start, end) {
+      await init(); const F = firebase.firestore.FieldPath.documentId();
+      const s = await db.collection('wsites').doc(sid).collection('d').where(F, '>=', start).where(F, '<=', end).get();
+      return s.docs.map((d) => ({ day: d.id, ...d.data() }));
+    },
   };
   window.DIR = D;
 })();
