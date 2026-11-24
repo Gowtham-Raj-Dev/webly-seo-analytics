@@ -382,6 +382,23 @@ async function loadTags(force) {
   return TAGS;
 }
 const tagSnippet = (t) => `<script defer src="https://${BRAND.host}/w.js" data-site="${t.id}" data-tz="${t.tz}"></script>`;
+/** Ready-made prompt for ChatGPT / Claude / Cursor etc.: adds the tag to every page of the user's site. */
+const tagAiPrompt = (t) => `Add the Webly Analytics tracking tag to my website ${t.host}.
+
+Put this exact line inside the <head> of EVERY page of the site (all pages, not only the home page), just before </head>:
+
+${tagSnippet(t)}
+
+Rules:
+- Use it exactly as written. Do not change the data-site or data-tz values, and do not add async, type or other attributes.
+- Add it only once per page. If the site has a shared layout, header or template (for example index.html, app/layout.tsx, pages/_document, header.php, theme.liquid, base.html or a layout component), add it there so every page gets it automatically.
+- If the framework has its own script component (for example next/script in Next.js), you may use it with strategy="afterInteractive", keeping src, data-site and data-tz exactly the same.
+- Single-page apps are fine: the tag counts page changes by itself, nothing else is needed.
+- Do not remove or change any other code.
+
+When you are done, tell me which file or files you changed, so I can deploy them.`;
+/** Where to paste the tag on common platforms (shown under each tag). */
+const TAG_WHERE = [['Plain HTML site', 'Paste it just before </head> in every .html file, or in the shared header file if your pages use one.'], ['WordPress', 'Install the free "WPCode" plugin, go to Code Snippets > Header & Footer, paste it in the Header box and save. It then runs on every page.'], ['Next.js', 'Add it once in app/layout.tsx (or pages/_document.tsx) inside <head>, so every page gets it.'], ['React, Vite, Vue, Angular', 'Paste it once in index.html, just before </head>. Page changes inside the app are counted by themselves.'], ['Blogger', 'Theme > Edit HTML, paste it just before </head>, then Save.'], ['Shopify', 'Online Store > Themes > Edit code > theme.liquid, paste it just before </head>, then Save.'], ['Wix, Squarespace, Webflow', 'Settings > Custom code > Head code. Choose "All pages" and paste it there.']];
 const dk = (k) => { try { return decodeURIComponent(k); } catch (e) { return k; } };
 const durS = (s) => { s = Math.round(s || 0); return s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor(s % 3600 / 60)}m` : s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`; };
 /** Add up the day docs of one or more tagged sites. */
@@ -400,8 +417,11 @@ const waIntro = () => `<div class="card ov-hero wa-hero c12"><div class="ov-hl">
 function waSetup(docs) {
   const tagged = new Set(TAGS.map((t) => t.host)), cand = allSites().filter((s) => !tagged.has(s.d));
   const status = (t) => docs.some((d) => d.sid === t.id) ? `<span class="tag ok">${I('ok', 12)} Receiving data</span>` : '<span class="tag warn">Waiting for the first visit</span>';
-  return `<div class="card c12 wa-setup"><div class="ch"><div><h3>${TAGS.length ? 'Your Webly tags' : 'Get your Webly tag'}</h3><div class="sub">Paste the tag on every page of your site, just before &lt;/head&gt;. One tag per website. Visits show up here within a minute.</div></div></div>
-    ${TAGS.map((t) => `<div class="wa-tag"><div class="wa-th">${fav(mk(t.host))}<div><b>${esc(t.host)}</b>${status(t)}</div><button class="btn p sm" data-act="tagcopy" data-id="${t.id}">${I('copy', 14)} Copy tag</button><button class="ob-link" data-act="tagdel" data-id="${t.id}">Remove</button></div><pre class="wa-code">${esc(tagSnippet(t))}</pre></div>`).join('')}
+  return `<div class="card c12 wa-setup"><div class="ch"><div><h3>${TAGS.length ? 'Your Webly tags' : 'Get your Webly tag'}</h3><div class="sub">One tag per website. Visits show up here within a minute of adding it.</div></div></div>
+    ${TAGS.length ? `<div class="wa-must">${I('bolt', 16)}<div><b>Add the tag to every page of your website, not only the home page.</b><span>Put it inside &lt;head&gt;, just before &lt;/head&gt;. If your site has a shared header or layout file, add it there once and every page gets it. Pages without the tag are not counted.</span></div></div>` : ''}
+    ${TAGS.map((t) => `<div class="wa-tag"><div class="wa-th">${fav(mk(t.host))}<div><b>${esc(t.host)}</b>${status(t)}</div><button class="btn p sm" data-act="tagcopy" data-id="${t.id}">${I('copy', 14)} Copy tag</button><button class="btn o sm" data-act="tagcopyai" data-id="${t.id}" title="Copies a ready prompt: paste it into ChatGPT, Claude, Cursor or any AI and it adds the tag to every page for you">${I('spark', 14)} Copy for AI</button><button class="ob-link" data-act="tagdel" data-id="${t.id}">Remove</button></div><pre class="wa-code">${esc(tagSnippet(t))}</pre>
+      <div class="wa-steps"><span><i>1</i>Copy the tag (or "Copy for AI" and paste it into ChatGPT, Claude or Cursor, which adds it for you)</span><span><i>2</i>Add it to every page, just before &lt;/head&gt;, and publish your site</span><span><i>3</i>Open your site once: the status above turns "Receiving data"</span></div>
+      <details class="wa-where"><summary>${I('chev', 15)} Where do I paste it? (WordPress, Next.js, Shopify, Blogger...)</summary><div>${TAG_WHERE.map((w) => `<p><b>${w[0]}</b><span>${esc(w[1])}</span></p>`).join('')}</div></details></div>`).join('')}
     <form class="wa-add" onsubmit="event.preventDefault();this.querySelector('button').click()"><div class="ov-in">${I('globe', 16)}<input id="tagHost" list="tagHosts" placeholder="Your website: example.com" autocomplete="off" value="${TAGS.length ? '' : esc(cand[0] ? cand[0].d : (S.obSite || ''))}"><datalist id="tagHosts">${cand.map((s) => `<option value="${esc(s.d)}">`).join('')}</datalist><button class="btn p" type="button" data-act="tagadd">${I('plus', 15)} ${TAGS.length ? 'Add another site' : 'Get my tag'}</button></div></form></div>`;
 }
 const waRows = (obj, n, f = (k) => esc(dk(k))) => { const e = Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n), mx = Math.max(1, ...e.map((x) => x[1])); return e.length ? `<div class="wa-rows">${e.map(([k, v]) => `<div><span>${f(k)}</span><b>${fmt(v)}</b><em><i style="width:${v / mx * 100}%"></i></em></div>`).join('')}</div>` : '<p class="sub">No data yet.</p>'; };
@@ -672,7 +692,7 @@ function loginPage() {
   <section class="lp-stats"><div><b>30+</b><span>checks in one site audit</span></div><div><b>${nT}</b><span>free website tools</span></div><div><b>3</b><span>Google products, one screen</span></div><div><b>Live</b><span>visitors with the Webly tag</span></div></section>
 
   <section class="lp-sec" id="lpWa"><div class="wa-lp"><div class="wa-lpt"><span class="lp-eye">Webly Analytics</span><h2>Google Analytics is slow. See your visitors live.</h2><p>Google Analytics reports can take hours, sometimes 24 to 48 hours, to show your numbers. Put the free Webly tag on your website and every visitor shows up in your dashboard within a minute.</p>
-    <ul class="lp-list"><li>${I('bolt', 16)}Who is on your site right now, and on which page</li><li>${I('chart', 16)}Visitors, page views, time on page, sources and devices</li><li>${I('copy', 16)}One line of code, works on any website</li><li>${I('eye', 16)}No cookies and no Google account needed</li></ul>
+    <ul class="lp-list"><li>${I('bolt', 16)}Who is on your site right now, and on which page</li><li>${I('chart', 16)}Visitors, page views, time on page, sources and devices</li><li>${I('copy', 16)}One line of code on every page of any website</li><li>${I('spark', 16)}Not a coder? Click "Copy for AI" and ChatGPT, Claude or Cursor adds it for you</li><li>${I('eye', 16)}No cookies and no Google account needed</li></ul>
     <div class="lp-cta" style="justify-content:flex-start">${ctaBtn('Get my free tag', '/dashboard#/visitors')}</div></div>
     <div class="wa-lpv"><div class="card wa-mock"><div class="wa-mh"><span class="lp-dot"></span><b>12</b><span>on your site right now</span><span class="tag ok">live</span></div><div class="wa-ml"><div><span>/blog/best-cake-recipes</span><b>5</b></div><div><span>/</span><b>4</b></div><div><span>/order</span><b>3</b></div></div><div class="wa-mk"><div><small>Visitors today</small><b>486</b></div><div><small>Page views</small><b>1,302</b></div><div><small>Avg. time</small><b>2m 41s</b></div></div></div>
       <pre class="card wa-code wa-mcode">&lt;script defer src="https://${BRAND.host}/w.js"
@@ -796,6 +816,7 @@ document.addEventListener('click', async (e) => {
     catch (er) { el.disabled = false; toast(er.code === 'permission-denied' ? 'Webly Analytics is not switched on yet (database rules not published).' : er.message); }
   }
   else if (a === 'tagcopy') { const t = (TAGS || []).find((x) => x.id === el.dataset.id); if (t) navigator.clipboard.writeText(tagSnippet(t)).then(() => toast('Tag copied. Paste it before </head> on every page.')); }
+  else if (a === 'tagcopyai') { const t = (TAGS || []).find((x) => x.id === el.dataset.id); if (t) navigator.clipboard.writeText(tagAiPrompt(t)).then(() => toast('Copied. Paste it into ChatGPT, Claude or Cursor: it adds the tag to every page.')); }
   else if (a === 'tagdel') { const t = (TAGS || []).find((x) => x.id === el.dataset.id); if (t && confirm(`Remove the Webly tag for ${t.host}? Its numbers will no longer be shown.`)) { try { await DIR.removeTagSite(t.id); TAGS = null; rerender(); toast('Removed'); } catch (er) { toast(er.message); } } }
   else if (a === 'tagsel') { S.tagSel = el.dataset.id; save(); rerender(); }
   else if (a === 'genreport') genReport();

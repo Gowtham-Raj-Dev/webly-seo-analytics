@@ -605,3 +605,16 @@ body.busy:before{content:"";position:fixed;top:0;left:0;height:3px;z-index:200;b
 /* Bricolage Grotesque is already narrow at display sizes: give big headings a little more room */
 .lp-hero h1,.pg-hero h1{letter-spacing:-.025em}
 .lp-head h2,.wa-lpt h2,.lp-endin h2,.ov-hl h2,.si-card h2,.lp-stats b,.ov-k .v,.lp-money,.wa-mh b{letter-spacing:-.015em}
+
+/* tag setup help */
+.wa-must{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;margin-bottom:14px;border-radius:12px;background:var(--warnbg);color:var(--tx)}
+.wa-must>svg{color:var(--warn);margin-top:2px}.wa-must b{display:block}.wa-must span{color:var(--tx2);font-size:13px}
+.wa-steps{display:flex;flex-direction:column;gap:8px;margin-top:12px;font-size:13px;color:var(--tx2)}
+.wa-steps span{display:flex;gap:10px;align-items:flex-start}
+.wa-steps i{display:grid;place-items:center;flex:none;width:20px;height:20px;border-radius:50%;background:var(--a1);color:#fff;font-style:normal;font-size:11px;font-weight:700}
+.wa-where{margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
+.wa-where summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--a2)}
+.wa-where summary::-webkit-details-marker{display:none}.wa-where summary svg{transition:transform .2s}.wa-where[open] summary svg{transform:rotate(180deg)}
+.wa-where>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 24px;margin-top:12px}
+.wa-where p{font-size:13px}.wa-where p b{display:block}.wa-where p span{color:var(--tx2)}
+@media(max-width:700px){.wa-where>div{grid-template-columns:1fr}}
