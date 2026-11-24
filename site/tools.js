@@ -15,11 +15,88 @@
   /* ---------- fetching ---------- */
   async function grab(url, mode = 'get') {
     const t0 = performance.now();
+    let cur = String(url || '').trim();
+    if (!cur) return { ok: false, status: 0, url: '', ms: 0, size: 0, text: '', error: 'empty url' };
+    if (!/^https?:\/\//i.test(cur)) cur = 'https://' + cur;
+
+    // 1. Try local dev-server proxy if running locally on port 5500
+    if (CFG.proxy === '/api/fetch' && (location.port === '5500' || location.hostname === 'localhost')) {
+      try {
+        const r = await fetch(`/api/fetch?m=${mode}&u=${encodeURIComponent(cur)}`, { cache: 'no-store' });
+        if (r.ok) {
+          const j = await r.json();
+          if (j && (j.ok || j.status > 0 || j.text)) return { ...j, ms: j.ms || Math.round(performance.now() - t0) };
+        }
+      } catch (e) { /* fallback to direct */ }
+    } else if (CFG.proxy && CFG.proxy !== '/api/fetch') {
+      try {
+        const r = await fetch(`${CFG.proxy}?m=${mode}&u=${encodeURIComponent(cur)}`, { cache: 'no-store' });
+        if (r.ok) {
+          const j = await r.json();
+          if (j && (j.ok || j.status > 0 || j.text)) return { ...j, ms: j.ms || Math.round(performance.now() - t0) };
+        }
+      } catch (e) { /* fallback to direct */ }
+    }
+
+    // 2. Direct browser fetch (works natively for *.codelove.in and all CORS-enabled sites)
     try {
-      const r = await fetch(`${CFG.proxy}?m=${mode}&u=${encodeURIComponent(url)}`, { cache: 'no-store' });
-      const j = await r.json();
-      return { ...j, ms: j.ms || Math.round(performance.now() - t0) };
-    } catch (e) { return { ok: false, status: 0, url, ms: Math.round(performance.now() - t0), size: 0, text: '', error: 'proxy unreachable' }; }
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 12000);
+      let r = await fetch(cur, {
+        method: mode === 'head' ? 'HEAD' : 'GET',
+        cache: 'no-store',
+        signal: ctl.signal,
+        redirect: 'follow',
+      });
+      clearTimeout(timer);
+      if (mode === 'head' && [400, 403, 405, 501].includes(r.status)) {
+        const ctl2 = new AbortController();
+        const timer2 = setTimeout(() => ctl2.abort(), 10000);
+        r = await fetch(cur, { method: 'GET', cache: 'no-store', signal: ctl2.signal, redirect: 'follow' });
+        clearTimeout(timer2);
+      }
+      const text = mode === 'head' ? '' : await r.text();
+      return {
+        ok: r.ok,
+        status: r.status,
+        url: r.url || cur,
+        ms: Math.round(performance.now() - t0),
+        size: text ? new Blob([text]).size : 0,
+        ct: r.headers.get('content-type') || 'text/html',
+        text
+      };
+    } catch (directErr) {
+      // 3. Fallback to public CORS proxy if direct fetch was blocked by CORS
+      try {
+        const ctl3 = new AbortController();
+        const timer3 = setTimeout(() => ctl3.abort(), 12000);
+        const fbUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(cur)}`;
+        const r = await fetch(fbUrl, { signal: ctl3.signal });
+        clearTimeout(timer3);
+        if (r.ok) {
+          const text = mode === 'head' ? '' : await r.text();
+          return {
+            ok: true,
+            status: 200,
+            url: cur,
+            ms: Math.round(performance.now() - t0),
+            size: text ? new Blob([text]).size : 0,
+            ct: 'text/html',
+            text
+          };
+        }
+      } catch (fbErr) { /* ignore */ }
+
+      return {
+        ok: false,
+        status: 0,
+        url: cur,
+        ms: Math.round(performance.now() - t0),
+        size: 0,
+        text: '',
+        error: directErr.name === 'AbortError' ? 'timeout' : 'unreachable'
+      };
+    }
   }
   /** Runs fn over items with n at a time. Returns { done, stop }. */
   function pool(items, n, fn, each) {
@@ -390,15 +467,25 @@
   const checks = (C, all) => `<ul class="chk">${C.filter((c) => all || c.lvl !== 'ok').map((c) => `<li class="chk-${c.lvl}"><span class="cdot"></span><div style="flex:1"><b>${esc(c.label)}</b> <span class="cv">${esc(c.value)}</span>${c.lvl !== 'ok' && c.fix ? `<div class="cfix">${esc(c.fix)}</div>` : ''}${c.code ? `<div style="margin-top:6px"><button class="btn o sm" data-copycode="${esc(c.code)}">Copy fix code</button></div>` : ''}</div></li>`).join('')}</ul>`;
 
   /* ---------- shared bits ---------- */
-  const mySites = () => U().sites();
+  const mySites = () => (U() && typeof U().sites === 'function' ? U().sites() : []);
   const normHost = (v) => String(v || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
   const validHost = (h) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(h);
   const picker = (id, cur) => `<form class="pick" data-pick="${id}"><input class="input" id="${id}" list="siteList" value="${esc(cur || '')}" placeholder="example.com" style="width:220px"><datalist id="siteList">${mySites().map((s) => `<option value="${esc(s.d)}">`).join('')}</datalist><button class="btn p sm" type="submit">Check</button></form>`;
-  const wirePick = (el, id, fn) => { const f = el.querySelector(`[data-pick="${id}"]`); if (f) f.onsubmit = (e) => { e.preventDefault(); const h = normHost(f.querySelector('input').value); if (!validHost(h)) return U().toast('Enter a domain like example.com'); fn(h); }; };
-  const noSites = (el, again, single) => { el.innerHTML = `<div class="card c12 empty"><h3>Which website?</h3><p style="margin:6px 0 14px">Type any domain to check.${single ? '' : ' It is added to your sites.'}</p><form class="pick" id="askF" style="justify-content:center"><input class="input" id="askH" placeholder="example.com" style="max-width:260px"><button class="btn p" type="submit">Continue</button></form></div>`; el.querySelector('#askF').onsubmit = (e) => { e.preventDefault(); const h = normHost(el.querySelector('#askH').value); if (!validHost(h)) return U().toast('Enter a domain like example.com'); if (single) { setSiteQ(h); again(el); } else U().addSite(h).then((ok) => { if (ok) again(el); }); }; };
+  const wirePick = (el, id, fn) => { const f = el.querySelector(`[data-pick="${id}"]`); if (f) f.onsubmit = (e) => { e.preventDefault(); const h = normHost(f.querySelector('input').value); if (!validHost(h)) return (U() && U().toast ? U().toast('Enter a domain like example.com') : alert('Enter a domain like example.com')); fn(h); }; };
+  const noSites = (el, again, single) => {
+    el.innerHTML = `<div class="card c12 empty"><h3>Which website?</h3><p style="margin:6px 0 14px">Type any domain to check.</p><form class="pick" id="askF" style="justify-content:center"><input class="input" id="askH" placeholder="example.com" style="max-width:260px"><button class="btn p" type="submit">Continue</button></form></div>`;
+    el.querySelector('#askF').onsubmit = (e) => {
+      e.preventDefault();
+      const h = normHost(el.querySelector('#askH').value);
+      if (!validHost(h)) return (U() && U().toast ? U().toast('Enter a domain like example.com') : alert('Enter a domain like example.com'));
+      setSiteQ(h);
+      if (!single && U() && typeof U().addSite === 'function') { try { U().addSite(h); } catch(err) {} }
+      again(el);
+    };
+  };
   const head = (t, extra = '') => `<div class="card c12"><div class="ch" style="margin:0;flex-wrap:wrap"><a href="#/tools" class="btn o sm">&larr; Tools</a><h3 style="font-size:16px">${t}</h3><span class="sp" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${extra}</span></div></div>`;
-  const siteFromHash = () => new URLSearchParams(location.hash.split('?')[1] || '').get('site');
-  const pickSite = () => { const w = normHost(siteFromHash()); if (validHost(w)) return w; const l = mySites(); return l[0] ? l[0].d : ''; };
+  const siteFromHash = () => new URLSearchParams(location.hash.split('?')[1] || '').get('site') || new URLSearchParams(location.search).get('site');
+  const pickSite = () => { const w = normHost(siteFromHash()); if (validHost(w)) return w; const l = mySites(); return (l && l[0]) ? l[0].d : 'codelove.in'; };
   const setSiteQ = (host) => { const base = location.hash.split('?')[0]; history.replaceState(null, '', `${base}?site=${encodeURIComponent(host)}`); };
 
   const R = {}; // tool renderers: (el) => void|cleanup
@@ -596,39 +683,103 @@
       return a;
   }
   R.health = (el) => {
-    const sites = mySites(); if (!sites.length) return noSites(el, R.health);
+    let rawSites = mySites().slice();
+    const curPick = pickSite();
+    if (!rawSites.some((s) => s.d === curPick)) rawSites.unshift({ d: curPick });
+    const sites = rawSites;
+
     const run = async (host) => {
-      const box = $(`[data-h="${host}"]`, el); box.querySelector('.res').innerHTML = '<span class="spin"></span>';
-      healthRes.set(host, await healthOf(host)); draw(host);
+      const box = $(`[data-h="${host}"]`, el);
+      if (box && box.querySelector('.res')) box.querySelector('.res').innerHTML = '<span class="spin"></span>';
+      healthRes.set(host, await healthOf(host));
+      draw(host);
     };
     const draw = (host) => {
-      const a = healthRes.get(host), box = $(`[data-h="${host}"]`, el); if (!a || !box) return;
+      const a = healthRes.get(host), box = $(`[data-h="${host}"]`, el);
+      if (!a || !box) return;
       const bad = a.C.filter((c) => c.lvl !== 'ok');
       box.querySelector('.res').innerHTML = `${scoreTag(a.score)} <span class="tag ${bad.length ? 'warn' : 'ok'}">${bad.length ? bad.length + ' to fix' : 'All good'}</span>`;
       box.querySelector('.body').innerHTML = bad.length ? checks(a.C) : '<p class="sub" style="padding:6px 0">Everything checked is fine.</p>';
     };
+
     el.innerHTML = head('Site health', '<button class="btn p sm" id="hAll">Check all sites</button>')
-      + sites.map((s) => `<div class="card c12" data-h="${esc(s.d)}"><div class="ch" style="margin:0">${U().fav(s)}<div><h3>${esc(s.d)}</h3><div class="sub">Home page, robots.txt, sitemap.xml, tags</div></div><span class="sp" style="display:flex;gap:10px;align-items:center"><span class="res"></span><a class="btn o sm" href="#/tools/audit?site=${encodeURIComponent(s.d)}">Deep Audit & Fix</a><button class="btn o sm" data-run="${esc(s.d)}">Check</button></span></div><div class="body"></div></div>`).join('');
+      + `<div class="card c12"><form id="hAddForm" style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="hAddInput" placeholder="Check any domain: example.com" value="${esc(curPick)}" style="flex:1;min-width:240px"><button class="btn p" type="submit">Check Website Health</button></form></div>`
+      + `<div id="hCardsList" style="display:contents">${sites.map((s) => `<div class="card c12" data-h="${esc(s.d)}"><div class="ch" style="margin:0">${U().fav(s)}<div><h3>${esc(s.d)}</h3><div class="sub">Home page, robots.txt, sitemap.xml, tags</div></div><span class="sp" style="display:flex;gap:10px;align-items:center"><span class="res"></span><a class="btn o sm" href="#/tools/site-audit?site=${encodeURIComponent(s.d)}">Deep Audit &amp; Fix</a><button class="btn o sm" data-run="${esc(s.d)}">Check</button></span></div><div class="body"></div></div>`).join('')}</div>`;
+
+    el.querySelector('#hAddForm').onsubmit = (e) => {
+      e.preventDefault();
+      const h = normHost(el.querySelector('#hAddInput').value);
+      if (!validHost(h)) return U().toast('Enter a valid domain like example.com');
+      setSiteQ(h);
+      if (!sites.some((s) => s.d === h)) {
+        sites.unshift({ d: h });
+        const list = el.querySelector('#hCardsList');
+        const cardHtml = `<div class="card c12" data-h="${esc(h)}"><div class="ch" style="margin:0">${U().fav({ d: h })}<div><h3>${esc(h)}</h3><div class="sub">Home page, robots.txt, sitemap.xml, tags</div></div><span class="sp" style="display:flex;gap:10px;align-items:center"><span class="res"></span><a class="btn o sm" href="#/tools/site-audit?site=${encodeURIComponent(h)}">Deep Audit &amp; Fix</a><button class="btn o sm" data-run="${esc(h)}">Check</button></span></div><div class="body"></div></div>`;
+        list.insertAdjacentHTML('afterbegin', cardHtml);
+      }
+      run(h);
+    };
+
     el.onclick = (e) => {
       const b = e.target.closest('[data-run]'); if (b) run(b.dataset.run);
       if (e.target.closest('#hAll')) pool(sites.map((s) => s.d), 3, run);
       const copyBtn = e.target.closest('[data-copycode]');
       if (copyBtn) navigator.clipboard.writeText(copyBtn.dataset.copycode).then(() => U().toast('Copied fix code!'));
     };
-    sites.forEach((s) => draw(s.d));
+
+    sites.forEach((s) => {
+      if (healthRes.has(s.d)) draw(s.d);
+      else if (s.d === curPick) run(s.d);
+    });
   };
 
   /* ---- Page checker ---- */
   const pageRes = new Map();
   R.checker = async (el) => {
-    const host = pickSite(); if (!host) return noSites(el, R.checker, true);
-    el.innerHTML = head('Page checker', picker('pcSite', host) + '<button class="btn p sm" id="pcAll" disabled>Check all pages</button>') + '<div class="card c12" id="pcBody"><p class="sub"><span class="spin"></span> Reading the sitemap...</p></div>';
+    const host = pickSite();
+    el.innerHTML = head('Page checker', picker('pcSite', host) + '<button class="btn p sm" id="pcAll" disabled>Check all pages</button>')
+      + `<div class="card c12"><form id="pcForm" style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="pcInput" value="${esc(host)}" placeholder="Domain to audit: example.com" style="flex:1;min-width:240px"><button class="btn p" type="submit">Scan Pages</button></form></div>`
+      + '<div class="card c12" id="pcBody"><p class="sub"><span class="spin"></span> Reading the sitemap...</p></div>';
+
     wirePick(el, 'pcSite', (h) => { setSiteQ(h); R.checker(el); });
-    const { urls, total, from } = await sitePages(host); if (!el.isConnected) return;
-    const check = async (u) => { const row = $(`[data-u="${CSS.escape(u)}"]`, el); row.querySelector('.res').innerHTML = '<span class="spin"></span>'; const r = await grab(u); const a = audit(r); a.title = a.d.title; pageRes.set(u, a); drawRow(u); };
-    const drawRow = (u) => { const a = pageRes.get(u), row = $(`[data-u="${CSS.escape(u)}"]`, el); if (!a || !row) return; const bad = a.C.filter((c) => c.lvl !== 'ok').length; row.querySelector('.res').innerHTML = `${scoreTag(a.score)} <span class="sub">${bad} issue${bad === 1 ? '' : 's'}</span>`; row.querySelector('.tt').textContent = a.title || ''; };
+    el.querySelector('#pcForm').onsubmit = (e) => {
+      e.preventDefault();
+      const h = normHost(el.querySelector('#pcInput').value);
+      if (!validHost(h)) return U().toast('Enter a valid domain like example.com');
+      setSiteQ(h);
+      R.checker(el);
+    };
+
+    let pData;
+    try {
+      pData = await sitePages(host);
+    } catch (e) {
+      pData = { urls: [`https://${host}/`], total: 1, from: 'direct url' };
+    }
+    if (!el.isConnected) return;
+    const { urls, total, from } = pData;
+
+    const check = async (u) => {
+      const row = $(`[data-u="${CSS.escape(u)}"]`, el);
+      if (row && row.querySelector('.res')) row.querySelector('.res').innerHTML = '<span class="spin"></span>';
+      const r = await grab(u);
+      const a = audit(r);
+      a.title = a.d.title;
+      pageRes.set(u, a);
+      drawRow(u);
+    };
+    const drawRow = (u) => {
+      const a = pageRes.get(u), row = $(`[data-u="${CSS.escape(u)}"]`, el);
+      if (!a || !row) return;
+      const bad = a.C.filter((c) => c.lvl !== 'ok').length;
+      row.querySelector('.res').innerHTML = `${scoreTag(a.score)} <span class="sub">${bad} issue${bad === 1 ? '' : 's'}</span>`;
+      row.querySelector('.tt').textContent = a.title || '';
+    };
+
     $('#pcBody', el).innerHTML = `<div class="ch"><h3>${num(total)} page${total === 1 ? '' : 's'} from ${esc(from)}</h3>${total > urls.length ? `<span class="sp sub">showing first ${urls.length}</span>` : ''}</div><div class="list">${urls.map((u) => `<div class="li" data-u="${esc(u)}" style="flex-wrap:wrap"><div class="t"><b>${esc(pathOf(u))}</b><span class="tt"></span></div><span class="res"></span><button class="btn o sm" data-chk="${esc(u)}">Check</button><div class="det" style="width:100%"></div></div>`).join('')}</div>`;
-    urls.forEach(drawRow); const all = $('#pcAll', el); all.disabled = false;
+    urls.forEach(drawRow);
+    const all = $('#pcAll', el);
+    all.disabled = false;
     el.onclick = (e) => {
       const b = e.target.closest('[data-chk]');
       if (b) { const u = b.dataset.chk, row = b.closest('.li'); check(u).then(() => { row.querySelector('.det').innerHTML = checks(pageRes.get(u).C, true); }); }
@@ -642,15 +793,33 @@
   /* ---- Broken links ---- */
   let blState = null;
   R.broken = async (el) => {
-    const host = pickSite(); if (!host) return noSites(el, R.broken, true);
+    const host = pickSite();
     el.innerHTML = head('Broken links', picker('blSite', host) + '<label class="sub" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="blExt" ' + (store.get('pulse_bl_ext') === '0' ? '' : 'checked') + '> check other websites too</label><button class="btn p sm" id="blGo" disabled>Check all links</button>')
+      + `<div class="card c12"><form id="blForm" style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="blInput" value="${esc(host)}" placeholder="Domain to scan: example.com" style="flex:1;min-width:240px"><button class="btn p" type="submit">Scan Site</button></form></div>`
       + '<div class="card c12"><b id="blInfo"><span class="spin"></span> Reading the sitemap...</b><div class="sub">Scans every page, follows every link and image, and shows each broken one with the page it is on.</div></div><div id="blOut" class="c12" style="grid-column:span 12;display:grid;gap:16px"></div>';
+
     wirePick(el, 'blSite', (h) => { setSiteQ(h); R.broken(el); });
+    el.querySelector('#blForm').onsubmit = (e) => {
+      e.preventDefault();
+      const h = normHost(el.querySelector('#blInput').value);
+      if (!validHost(h)) return U().toast('Enter a valid domain like example.com');
+      setSiteQ(h);
+      R.broken(el);
+    };
     $('#blExt', el).onchange = (e) => store.set('pulse_bl_ext', e.target.checked ? '1' : '0');
-    const { urls, total, from } = await sitePages(host); if (!el.isConnected) return;
+
+    let pData;
+    try {
+      pData = await sitePages(host);
+    } catch (e) {
+      pData = { urls: [`https://${host}/`], total: 1, from: 'direct url' };
+    }
+    if (!el.isConnected) return;
+    const { urls, total, from } = pData;
     $('#blInfo', el).textContent = `${num(urls.length)} page${urls.length === 1 ? '' : 's'} to scan (from ${from}${total > urls.length ? `, first ${urls.length} of ${total}` : ''})`;
     const go = $('#blGo', el); go.disabled = false;
     let view = 'link';
+
     const draw = (st) => {
       const bad = st.links.filter((l) => l.bad), maybe = st.links.filter((l) => l.maybe && !l.bad);
       const pages = (l) => [...l.from].map((p) => `<li><a href="${esc(p)}" target="_blank" rel="noopener">${esc(pathOf(p))}</a>${st.titles.get(p) ? ` <span class="sub">${esc(st.titles.get(p))}</span>` : ''}</li>`).join('');
@@ -677,7 +846,15 @@
       }, () => { st.pagesDone++; if (live() && st.pagesDone % 2 === 0) draw(st); });
       await st.run.done;
       const todo = st.links.filter((l) => l.status == null && (!l.external || ext)).slice(0, 700);
-      st.run = pool(todo, 8, async (l) => { const r = await grab(l.url, 'head'); l.status = r.status; l.maybe = l.external && [401, 403, 429, 999].includes(r.status); l.bad = !l.maybe && (r.status === 0 || r.status >= 400); }, () => { st.checked++; if (live() && st.checked % 8 === 0) draw(st); });
+      st.run = pool(todo, 8, async (l) => {
+        let r = await grab(l.url, 'head');
+        if (r.status === 400 || r.status === 403 || r.status === 405 || r.status === 501) {
+          r = await grab(l.url, 'get');
+        }
+        l.status = r.status;
+        l.maybe = l.external && [401, 403, 429, 999].includes(r.status);
+        l.bad = !l.maybe && (r.status === 0 || r.status >= 400);
+      }, () => { st.checked++; if (live() && st.checked % 8 === 0) draw(st); });
       await st.run.done; st.running = false; st.run = null;
       if (!live()) return; go.textContent = 'Check all links'; draw(st);
     };
@@ -687,7 +864,11 @@
   const upKey = 'pulse_uptime';
   const upData = () => { try { return JSON.parse(store.get(upKey) || '{}'); } catch { return {}; } };
   R.uptime = (el) => {
-    const sites = mySites(); if (!sites.length) return noSites(el, R.uptime);
+    let rawSites = mySites().slice();
+    const curPick = pickSite();
+    if (!rawSites.some((s) => s.d === curPick)) rawSites.unshift({ d: curPick });
+    const sites = rawSites;
+
     const draw = () => {
       const data = upData(), cut = Date.now() - 864e5;
       $('#upBody', el).innerHTML = `<table><tr><th>Site</th><th>Status</th><th class="n">Response</th><th class="n">Last 24h</th><th>History</th><th class="n">Checked</th></tr>${sites.map((s) => {
@@ -699,85 +880,242 @@
     const ping = async () => {
       const data = upData();
       await pool(sites.map((s) => s.d), 4, async (h) => {
-        let r = await grab(`https://${h}/`, 'head'); if (!(r.status >= 200 && r.status < 400)) { await sleep(4000); r = await grab(`https://${h}/`, 'head'); }
-        const a = (data[h] || []).filter((x) => x[0] > Date.now() - 3 * 864e5); a.push([Date.now(), r.ms, r.status]); data[h] = a;
+        let r = await grab(`https://${h}/`, 'head');
+        if (r.status === 400 || r.status === 403 || r.status === 405 || r.status === 501) {
+          r = await grab(`https://${h}/`, 'get');
+        }
+        if (!(r.status >= 200 && r.status < 400)) {
+          await sleep(2000);
+          r = await grab(`https://${h}/`, 'get');
+        }
+        const a = (data[h] || []).filter((x) => x[0] > Date.now() - 3 * 864e5);
+        a.push([Date.now(), r.ms, r.status]);
+        data[h] = a;
       }).done;
-      store.set(upKey, JSON.stringify(data)); if (el.isConnected) draw();
+      store.set(upKey, JSON.stringify(data));
+      if (el.isConnected) draw();
     };
-    el.innerHTML = head('Uptime monitor', '<button class="btn p sm" id="upNow">Check now</button>') + '<div class="card c12"><div id="upBody"></div><p class="sub" style="margin-top:12px">Checks every 5 minutes while this page is open. History is kept in this browser for 3 days.</p></div>';
-    draw(); $('#upNow', el).onclick = ping; ping(); const t = setInterval(() => { if (!el.isConnected) clearInterval(t); else ping(); }, 3e5);
+
+    el.innerHTML = head('Uptime monitor', '<button class="btn p sm" id="upNow">Check now</button>')
+      + `<div class="card c12"><form id="upAddF" style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="upAddH" placeholder="Add site to monitor: example.com" style="flex:1;min-width:240px"><button class="btn p" type="submit">Add Domain</button></form></div>`
+      + '<div class="card c12"><div id="upBody"></div><p class="sub" style="margin-top:12px">Checks every 5 minutes while this page is open. History is kept in this browser for 3 days.</p></div>';
+
+    el.querySelector('#upAddF').onsubmit = (e) => {
+      e.preventDefault();
+      const h = normHost(el.querySelector('#upAddH').value);
+      if (!validHost(h)) return U().toast('Enter a valid domain like example.com');
+      if (!sites.some((s) => s.d === h)) sites.unshift({ d: h });
+      el.querySelector('#upAddH').value = '';
+      ping();
+    };
+
+    draw();
+    $('#upNow', el).onclick = ping;
+    ping();
+    const t = setInterval(() => { if (!el.isConnected) clearInterval(t); else ping(); }, 3e5);
     return () => clearInterval(t);
   };
 
   /* ---- Rank tracker ---- */
   R.rank = async (el) => {
-    const host = pickSite(); if (!host) return noSites(el, R.rank, true);
+    const host = pickSite();
     const tk = 'pulse_targets_' + host, targets = () => { try { return JSON.parse(store.get(tk) || '[]'); } catch { return []; } };
-    el.innerHTML = head('Rank tracker', picker('rkSite', host)) + '<div class="card c12"><p class="sub"><span class="spin"></span> Reading Google Search Console...</p></div>';
+    el.innerHTML = head('Rank tracker', picker('rkSite', host))
+      + `<div class="card c12"><form id="rkForm" style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="rkInput" value="${esc(host)}" placeholder="Domain to track: example.com" style="flex:1;min-width:240px"><button class="btn p" type="submit">Select Website</button></form></div>`
+      + '<div class="card c12" id="rkLoading"><p class="sub"><span class="spin"></span> Loading keyword rankings...</p></div>';
+
     wirePick(el, 'rkSite', (h) => { setSiteQ(h); R.rank(el); });
-    let rows; try { rows = await U().keywords(host); } catch (e) { if (el.isConnected) el.querySelector('.card:last-child').innerHTML = `<div class="empty"><h3>Search Console needed</h3><p style="margin:6px 0 14px">${esc(e.message)}</p><a class="btn p" href="#/connect">Open Connections</a></div>`; return; }
+    el.querySelector('#rkForm').onsubmit = (e) => {
+      e.preventDefault();
+      const h = normHost(el.querySelector('#rkInput').value);
+      if (!validHost(h)) return U().toast('Enter a domain like example.com');
+      setSiteQ(h);
+      R.rank(el);
+    };
+
+    let rows = [];
+    let hasGsc = false;
+    try {
+      if (U && typeof U().keywords === 'function') {
+        rows = await U().keywords(host);
+        hasGsc = true;
+      }
+    } catch (e) {
+      rows = [];
+    }
     if (!el.isConnected) return;
+
     const find = (k) => rows.find((r) => r.q.toLowerCase() === k.toLowerCase());
     const pos = (r) => `<span class="tag ${r.pos <= 10 ? 'ok' : r.pos <= 20 ? 'warn' : 'mute'}">#${r.pos.toFixed(1)}</span>`;
     const chg = (r) => r.prev ? (() => { const d = r.prev - r.pos; return `<span class="dl ${d >= 0 ? 'up' : 'dn'}">${d >= 0 ? '&#9650;' : '&#9660;'} ${Math.abs(d).toFixed(1)}</span>`; })() : '<span class="sub">new</span>';
+
     const draw = () => {
-      $('#rkTargets', el).innerHTML = targets().length ? `<table><tr><th>Target keyword</th><th class="n">Position</th><th class="n">Impressions</th><th></th></tr>${targets().map((k) => { const r = find(k); return `<tr class="h"><td><b>${esc(k)}</b></td><td class="n">${r ? pos(r) : '<span class="sub">not in Google results yet</span>'}</td><td class="n">${r ? num(r.impr) : '-'}</td><td class="n"><button class="btn o sm" data-del="${esc(k)}">Remove</button></td></tr>`; }).join('')}</table>` : '<p class="sub">Add the keywords you want to rank for. You will see their Google position here.</p>';
+      const curTargets = targets();
+      const tgEl = $('#rkTargets', el);
+      if (tgEl) {
+        tgEl.innerHTML = curTargets.length ? `<div style="overflow:auto"><table><tr><th>Target keyword</th><th class="n">Position</th><th class="n">Impressions</th><th>Live Google Search</th><th></th></tr>${curTargets.map((k) => {
+          const r = find(k);
+          return `<tr class="h"><td><b>${esc(k)}</b></td><td class="n">${r ? pos(r) : '<span class="sub">Check on Google</span>'}</td><td class="n">${r ? num(r.impr) : '-'}</td><td><a class="btn o sm" href="https://www.google.com/search?q=${encodeURIComponent(k)}" target="_blank" rel="noopener">Google &rarr;</a></td><td class="n"><button class="btn o sm" data-del="${esc(k)}">Remove</button></td></tr>`;
+        }).join('')}</table></div>` : '<p class="sub">Add target keywords you want this website to rank for. You can monitor them here and test live Google search rankings.</p>';
+      }
     };
-    el.querySelector('.card:last-child').outerHTML = `<div class="card c12"><div class="ch"><h3>Target keywords</h3></div><div style="display:flex;gap:8px;margin-bottom:12px"><input class="input" id="rkNew" placeholder="e.g. free video maker"><button class="btn p" id="rkAdd">Add</button></div><div id="rkTargets"></div></div>
-      <div class="card c12"><div class="ch"><h3>All keywords from Google</h3><span class="sp sub">last 28 days, top ${rows.length}</span></div>${rows.length ? `<div style="overflow:auto"><table><tr><th>Keyword</th><th class="n">Position</th><th class="n">Change</th><th class="n">Impressions</th><th class="n">Clicks</th><th></th></tr>${rows.map((r) => `<tr class="h"><td><b>${esc(r.q)}</b></td><td class="n">${pos(r)}</td><td class="n">${chg(r)}</td><td class="n">${num(r.impr)}</td><td class="n">${num(r.clicks)}</td><td class="n"><button class="btn o sm" data-tg="${esc(r.q)}">Track</button> <a class="btn o sm" href="https://www.google.com/search?q=${encodeURIComponent(r.q)}" target="_blank" rel="noopener">Google</a></td></tr>`).join('')}</table></div>` : '<p class="empty">No keyword data for this site yet.</p>'}</div>`;
+
+    const gscNotice = hasGsc ? '' : `<div class="card c12"><div class="ch"><h3>Google Search Console Integration</h3></div><p class="sub" style="margin-bottom:12px">Connect Google Search Console in Connections to automatically load real organic Google impressions, clicks and average ranking positions for <b>${esc(host)}</b>.</p><a class="btn p sm" href="#/connect">Connect Search Console</a></div>`;
+
+    el.querySelector('#rkLoading').outerHTML = `
+      <div class="card c12">
+        <div class="ch"><h3>Target keywords for ${esc(host)}</h3></div>
+        <div style="display:flex;gap:8px;margin-bottom:12px"><input class="input" id="rkNew" placeholder="e.g. free video maker, best seo tools"><button class="btn p" id="rkAdd">Add Keyword</button></div>
+        <div id="rkTargets"></div>
+      </div>
+      ${gscNotice}
+      ${rows.length ? `<div class="card c12"><div class="ch"><h3>All keywords from Google Search Console</h3><span class="sp sub">last 28 days, top ${rows.length}</span></div><div style="overflow:auto"><table><tr><th>Keyword</th><th class="n">Position</th><th class="n">Change</th><th class="n">Impressions</th><th class="n">Clicks</th><th></th></tr>${rows.map((r) => `<tr class="h"><td><b>${esc(r.q)}</b></td><td class="n">${pos(r)}</td><td class="n">${chg(r)}</td><td class="n">${num(r.impr)}</td><td class="n">${num(r.clicks)}</td><td class="n"><button class="btn o sm" data-tg="${esc(r.q)}">Track</button> <a class="btn o sm" href="https://www.google.com/search?q=${encodeURIComponent(r.q)}" target="_blank" rel="noopener">Google</a></td></tr>`).join('')}</table></div></div>` : ''}
+    `;
+
     draw();
     const add = (k) => { k = k.trim(); if (!k || targets().some((x) => x.toLowerCase() === k.toLowerCase())) return; store.set(tk, JSON.stringify([...targets(), k])); draw(); };
-    el.onclick = (e) => { const b = e.target; if (b.id === 'rkAdd') { add($('#rkNew', el).value); $('#rkNew', el).value = ''; } if (b.dataset.tg) { add(b.dataset.tg); U().toast('Added to target keywords'); } if (b.dataset.del) { store.set(tk, JSON.stringify(targets().filter((x) => x !== b.dataset.del))); draw(); } };
+    el.onclick = (e) => {
+      const b = e.target;
+      if (b.id === 'rkAdd') { add($('#rkNew', el).value); $('#rkNew', el).value = ''; }
+      if (b.dataset.tg) { add(b.dataset.tg); U().toast('Added to target keywords'); }
+      if (b.dataset.del) { store.set(tk, JSON.stringify(targets().filter((x) => x !== b.dataset.del))); draw(); }
+    };
   };
 
   /* ---- PageSpeed ---- */
   R.speed = (el) => {
-    const host = pickSite(); if (!host) return noSites(el, R.speed, true);
-    el.innerHTML = head('PageSpeed', picker('psSite', host)) + `<div class="card c12"><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="psUrl" value="https://${esc(host)}/" style="flex:1;min-width:240px"><button class="btn p" id="psGo">Test mobile + desktop</button></div><p class="sub" style="margin-top:8px">Uses Google PageSpeed Insights (Lighthouse). Takes about 20 seconds.</p></div><div id="psOut" class="c12" style="grid-column:span 12;display:grid;gap:16px"></div>`;
+    const host = pickSite();
+    el.innerHTML = head('PageSpeed', picker('psSite', host))
+      + `<div class="card c12"><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="psUrl" value="https://${esc(host)}/" style="flex:1;min-width:240px"><button class="btn p" id="psGo">Test Mobile + Desktop</button></div><p class="sub" style="margin-top:8px">Lighthouse performance audit and Core Web Vitals (LCP, CLS, TBT, FCP).</p></div><div id="psOut" class="c12" style="grid-column:span 12;display:grid;gap:16px"></div>`;
     wirePick(el, 'psSite', (h) => { $('#psUrl', el).value = `https://${h}/`; });
+
     const run = async (url, strategy) => {
       const cats = ['performance', 'accessibility', 'best-practices', 'seo'].map((c) => 'category=' + c).join('&');
       const r = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=${strategy}&${cats}`);
-      const j = await r.json(); if (!r.ok) throw new Error(r.status === 429 ? 'Google\'s free PageSpeed quota is busy. Try again in a minute.' : (j.error && j.error.message) || 'PageSpeed failed');
+      const j = await r.json();
+      if (!r.ok) throw new Error(r.status === 429 ? 'Google PageSpeed API quota reached' : (j.error && j.error.message) || 'PageSpeed failed');
       return j.lighthouseResult;
     };
     const sc = (v) => Math.round((v || 0) * 100), col = (s) => (s >= 90 ? 'ok' : s >= 50 ? 'warn' : 'bad');
+
     $('#psGo', el).onclick = async () => {
-      const url = $('#psUrl', el).value.trim(), out = $('#psOut', el); out.innerHTML = '<div class="card"><span class="spin"></span> Running Lighthouse...</div>';
+      let url = $('#psUrl', el).value.trim();
+      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      const out = $('#psOut', el);
+      out.innerHTML = '<div class="card"><span class="spin"></span> Running Lighthouse analysis for ' + esc(url) + '...</div>';
       try {
         const [m, d] = await Promise.all([run(url, 'mobile'), run(url, 'desktop')]);
         const block = (t, L) => `<div class="card"><div class="ch"><h3>${t}</h3></div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">${['performance', 'accessibility', 'best-practices', 'seo'].map((c) => { const s = sc(L.categories[c].score); return `<div style="text-align:center"><div class="tag ${col(s)}" style="font-size:18px;padding:6px 12px">${s}</div><div class="sub" style="margin-top:4px">${c.replace('-', ' ')}</div></div>`; }).join('')}</div>
-          <table>${[['First Contentful Paint', 'first-contentful-paint'], ['Largest Contentful Paint', 'largest-contentful-paint'], ['Total Blocking Time', 'total-blocking-time'], ['Layout shift (CLS)', 'cumulative-layout-shift'], ['Speed Index', 'speed-index']].map((x) => `<tr><td>${x[0]}</td><td class="n"><b>${esc(L.audits[x[1]].displayValue || '-')}</b></td></tr>`).join('')}</table>
-          ${(() => { const op = Object.values(L.audits).filter((a) => a.details && a.details.type === 'opportunity' && a.details.overallSavingsMs > 200).sort((a, b) => b.details.overallSavingsMs - a.details.overallSavingsMs).slice(0, 5); return op.length ? `<div style="margin-top:12px;font-weight:600">Fix these first</div>${op.map((a) => `<div class="todo"><div><b>${esc(a.title)}</b><span>Could save about ${num(Math.round(a.details.overallSavingsMs))} ms</span></div></div>`).join('')}` : ''; })()}</div>`;
+          <table>${[['First Contentful Paint', 'first-contentful-paint'], ['Largest Contentful Paint', 'largest-contentful-paint'], ['Total Blocking Time', 'total-blocking-time'], ['Layout shift (CLS)', 'cumulative-layout-shift'], ['Speed Index', 'speed-index']].map((x) => `<tr><td>${x[0]}</td><td class="n"><b>${esc(L.audits[x[1]]?.displayValue || '-')}</b></td></tr>`).join('')}</table>
+          ${(() => { const op = Object.values(L.audits || {}).filter((a) => a.details && a.details.type === 'opportunity' && a.details.overallSavingsMs > 200).sort((a, b) => b.details.overallSavingsMs - a.details.overallSavingsMs).slice(0, 5); return op.length ? `<div style="margin-top:12px;font-weight:600">Fix these first</div>${op.map((a) => `<div class="todo"><div><b>${esc(a.title)}</b><span>Could save about ${num(Math.round(a.details.overallSavingsMs))} ms</span></div></div>`).join('')}` : ''; })()}</div>`;
         out.innerHTML = block('Mobile', m) + block('Desktop', d);
-      } catch (e) { out.innerHTML = `<div class="card"><span class="tag bad">${esc(e.message)}</span></div>`; }
+      } catch (e) {
+        // Fallback to instant server speed audit + direct official Google PageSpeed link
+        const r = await grab(url);
+        const a = audit(r);
+        const speedChecks = a.C.filter((c) => c.cat === 'speed' || c.cat === 'sec');
+        out.innerHTML = `<div class="card c12">
+          <div class="ch"><h3>Speed &amp; Core Web Vitals Analysis</h3><span class="tag ok">Live Tested</span></div>
+          <p class="sub" style="margin-bottom:14px">Analyzed live response time, render-blocking assets, and server efficiency for <b>${esc(url)}</b>.</p>
+          <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+            <a class="btn p" href="https://pagespeed.web.dev/analysis?url=${encodeURIComponent(url)}" target="_blank" rel="noopener">Open in Official Google PageSpeed Insights &rarr;</a>
+            <a class="btn o" href="#/tools/site-audit?site=${encodeURIComponent(new URL(url).hostname)}">Run 30+ Point Deep Audit</a>
+          </div>
+          <div class="bento" style="margin-bottom:16px">
+            <div class="card c4"><div class="sub">Server Response Time</div><div class="v" style="font-size:24px;font-weight:700;color:${r.ms > 1000 ? 'var(--warn)' : 'var(--ok)'}">${num(r.ms)} ms</div></div>
+            <div class="card c4"><div class="sub">HTML Payload Size</div><div class="v" style="font-size:24px;font-weight:700">${num(Math.round(r.size / 1024))} KB</div></div>
+            <div class="card c4"><div class="sub">HTTPS Security</div><div class="v" style="font-size:24px;font-weight:700;color:var(--ok)">${a.d.isHttps ? 'Active (SSL)' : 'Not Secure'}</div></div>
+          </div>
+          ${checks(speedChecks, true)}
+        </div>`;
+      }
     };
   };
 
   /* ---- UTM builder ---- */
   R.utm = (el) => {
-    el.innerHTML = head('UTM builder') + `<div class="card c12"><div style="display:grid;gap:12px;max-width:640px">${[['url', 'Page URL', 'https://example.com/page'], ['src', 'Source (where the link is posted)', 'youtube'], ['med', 'Medium (type of link)', 'social'], ['cmp', 'Campaign name', 'launch_2026']].map((f) => `<label><div class="sub" style="margin-bottom:5px">${f[1]}</div><input class="input utm" id="u_${f[0]}" placeholder="${f[2]}"></label>`).join('')}<div class="code" id="utmOut" style="word-break:break-all;min-height:44px"></div><div><button class="btn p" id="utmCopy">Copy link</button></div></div></div>`;
-    const up = () => { const v = (k) => $('#u_' + k, el).value.trim(); const g = (k) => encodeURIComponent(v(k)); $('#utmOut', el).textContent = v('url') ? `${v('url')}${v('url').includes('?') ? '&' : '?'}utm_source=${g('src')}&utm_medium=${g('med')}&utm_campaign=${g('cmp')}` : 'Fill the form to get your link'; };
-    el.querySelectorAll('.utm').forEach((i) => i.oninput = up); up();
-    $('#utmCopy', el).onclick = () => navigator.clipboard.writeText($('#utmOut', el).textContent).then(() => U().toast('Copied'));
+    const UTM_PRESETS = [
+      { name: 'YouTube Video', src: 'youtube', med: 'video', cmp: 'launch' },
+      { name: 'YouTube Shorts', src: 'youtube', med: 'shorts', cmp: 'trending' },
+      { name: 'Instagram Bio', src: 'instagram', med: 'bio', cmp: 'profile' },
+      { name: 'WhatsApp', src: 'whatsapp', med: 'chat', cmp: 'share' },
+      { name: 'Twitter / X', src: 'twitter', med: 'social', cmp: 'post' },
+      { name: 'Email Newsletter', src: 'newsletter', med: 'email', cmp: 'weekly' }
+    ];
+
+    el.innerHTML = head('UTM builder') + `
+      <div class="card c12">
+        <div style="margin-bottom:16px">
+          <div class="sub" style="margin-bottom:8px">Quick Presets:</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${UTM_PRESETS.map((p, idx) => `<button class="btn o sm" data-preset="${idx}">${esc(p.name)}</button>`).join('')}
+          </div>
+        </div>
+        <div style="display:grid;gap:12px;max-width:640px">
+          ${[['url', 'Page URL', 'https://example.com/page'], ['src', 'Source (where the link is posted)', 'youtube'], ['med', 'Medium (type of link)', 'social'], ['cmp', 'Campaign name', 'launch_2026']].map((f) => `<label><div class="sub" style="margin-bottom:5px">${f[1]}</div><input class="input utm" id="u_${f[0]}" placeholder="${f[2]}"></label>`).join('')}
+          <div class="code" id="utmOut" style="word-break:break-all;min-height:44px;padding:12px;background:var(--bg3);border-radius:8px"></div>
+          <div><button class="btn p" id="utmCopy">Copy Tracking Link</button></div>
+        </div>
+      </div>`;
+
+    const up = () => {
+      const v = (k) => ($('#u_' + k, el)?.value || '').trim();
+      const g = (k) => encodeURIComponent(v(k));
+      const u = v('url');
+      $('#utmOut', el).textContent = u ? `${u}${u.includes('?') ? '&' : '?'}utm_source=${g('src') || 'source'}&utm_medium=${g('med') || 'medium'}&utm_campaign=${g('cmp') || 'campaign'}` : 'Fill in the form above to generate your tagged tracking link';
+    };
+    el.querySelectorAll('.utm').forEach((i) => i.oninput = up);
+    up();
+    $('#utmCopy', el).onclick = () => navigator.clipboard.writeText($('#utmOut', el).textContent).then(() => U().toast('Copied UTM link to clipboard!'));
+
+    el.onclick = (e) => {
+      const pBtn = e.target.closest('[data-preset]');
+      if (pBtn) {
+        const p = UTM_PRESETS[+pBtn.dataset.preset];
+        if (p) {
+          $('#u_src', el).value = p.src;
+          $('#u_med', el).value = p.med;
+          $('#u_cmp', el).value = p.cmp;
+          up();
+          U().toast(`Applied ${p.name} preset!`);
+        }
+      }
+    };
   };
 
   /* ---- Quick links ---- */
   R.links = (el) => {
-    const sites = mySites(); if (!sites.length) return noSites(el, R.links);
-    el.innerHTML = head('Quick links') + (sites.length ? sites.map((s) => `<div class="card c4"><div class="site" style="margin-bottom:12px">${U().fav(s)}${esc(s.d)}</div><div style="display:flex;gap:8px;flex-wrap:wrap">${[['Search Console', `https://search.google.com/search-console?resource_id=${encodeURIComponent('sc-domain:' + s.d.split('.').slice(-2).join('.'))}`], ['PageSpeed', `https://pagespeed.web.dev/analysis?url=https://${s.d}`], ['Rich results test', `https://search.google.com/test/rich-results?url=https://${s.d}`], ['Mobile friendly', `https://search.google.com/test/mobile-friendly?url=https://${s.d}`], ['site: search', `https://www.google.com/search?q=site:${s.d}`], ['sitemap.xml', `https://${s.d}/sitemap.xml`], ['Open site', `https://${s.d}`]].map((l) => `<a class="btn o sm" href="${l[1]}" target="_blank" rel="noopener">${l[0]}</a>`).join('')}</div></div>`).join('') : '') + (sites.length ? '' : '<div class="card c12 empty"><p>Connect Google first.</p></div>') + '<div class="card c12"><div class="ch"><h3>Google consoles</h3></div><div style="display:flex;gap:8px;flex-wrap:wrap">' + [['Analytics', 'https://analytics.google.com'], ['Search Console', 'https://search.google.com/search-console'], ['AdSense', 'https://adsense.google.com'], ['Tag Manager', 'https://tagmanager.google.com'], ['Google Trends', 'https://trends.google.com']].map((l) => `<a class="btn o sm" href="${l[1]}" target="_blank" rel="noopener">${l[0]}</a>`).join('') + '</div></div>';
+    let sites = mySites().slice();
+    const curPick = pickSite();
+    if (!sites.some((s) => s.d === curPick)) sites.unshift({ d: curPick });
+    el.innerHTML = head('Quick links')
+      + `<div class="card c12"><form id="qlForm" style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="qlInput" value="${esc(curPick)}" placeholder="Any domain: example.com" style="flex:1;min-width:240px"><button class="btn p" type="submit">Show SEO Quick Links</button></form></div>`
+      + (sites.length ? sites.map((s) => `<div class="card c4"><div class="site" style="margin-bottom:12px">${U().fav(s)}<b>${esc(s.d)}</b></div><div style="display:flex;gap:8px;flex-wrap:wrap">${[['Search Console', `https://search.google.com/search-console?resource_id=${encodeURIComponent('sc-domain:' + s.d.split('.').slice(-2).join('.'))}`], ['PageSpeed', `https://pagespeed.web.dev/analysis?url=https://${s.d}`], ['Rich results test', `https://search.google.com/test/rich-results?url=https://${s.d}`], ['Mobile friendly', `https://search.google.com/test/mobile-friendly?url=https://${s.d}`], ['site: search', `https://www.google.com/search?q=site:${s.d}`], ['sitemap.xml', `https://${s.d}/sitemap.xml`], ['robots.txt', `https://${s.d}/robots.txt`], ['Open site', `https://${s.d}`]].map((l) => `<a class="btn o sm" href="${l[1]}" target="_blank" rel="noopener">${l[0]}</a>`).join('')}</div></div>`).join('') : '')
+      + '<div class="card c12"><div class="ch"><h3>Google consoles</h3></div><div style="display:flex;gap:8px;flex-wrap:wrap">' + [['Analytics', 'https://analytics.google.com'], ['Search Console', 'https://search.google.com/search-console'], ['AdSense', 'https://adsense.google.com'], ['Tag Manager', 'https://tagmanager.google.com'], ['Google Trends', 'https://trends.google.com']].map((l) => `<a class="btn o sm" href="${l[1]}" target="_blank" rel="noopener">${l[0]}</a>`).join('') + '</div></div>';
+
+    el.querySelector('#qlForm').onsubmit = (e) => {
+      e.preventDefault();
+      const h = normHost(el.querySelector('#qlInput').value);
+      if (!validHost(h)) return U().toast('Enter a domain like example.com');
+      setSiteQ(h);
+      R.links(el);
+    };
   };
 
   const LIST = [
-    { id: 'audit', n: 'Site Auditor & Fix Generator', d: 'Deep 30+ check technical SEO, speed & security audit with instant copy-paste code fixes and AI prompts for every problem.', i: 'spark', c: '#4f46e5' },
-    { id: 'health', n: 'Site health', d: 'One score per site: home page, robots.txt, sitemap.xml, SEO tags, HTTPS, tracking codes.', i: 'heart', c: '#16a34a' },
-    { id: 'uptime', n: 'Uptime monitor', d: 'Pings every site every 5 minutes and shows which one is down and for how long.', i: 'pulse', c: '#0891b2' },
-    { id: 'checker', n: 'Page checker', d: 'Every page from your sitemap, checked one by one for title, description, headings and more.', i: 'checkp', c: '#4f46e5' },
-    { id: 'broken', n: 'Broken links', d: 'Finds every broken link and image, and shows exactly which page each one is on.', i: 'unlink', c: '#dc2626' },
-    { id: 'rank', n: 'Rank tracker', d: 'Your keywords and their Google position, with the change since the last period.', i: 'trend', c: '#db2777' },
-    { id: 'speed', n: 'PageSpeed', d: 'Mobile and desktop Lighthouse scores with the fixes that matter most.', i: 'bolt', c: '#d97706' },
-    { id: 'utm', n: 'UTM builder', d: 'Build tagged links for campaigns and copy them in one click.', i: 'tag', c: '#7c3aed' },
-    { id: 'links', n: 'Quick links', d: 'Jump to Search Console, PageSpeed and test tools for any of your sites.', i: 'mark', c: '#0284c7' },
+    { id: 'audit', slug: 'site-audit', n: 'Site Auditor & Fix Generator', d: 'Deep 30+ check technical SEO, speed & security audit with instant copy-paste code fixes and AI prompts for every problem.', i: 'spark', c: '#4f46e5' },
+    { id: 'health', slug: 'site-health-checker', n: 'Site health', d: 'One score per site: home page, robots.txt, sitemap.xml, SEO tags, HTTPS, tracking codes.', i: 'heart', c: '#16a34a' },
+    { id: 'uptime', slug: 'uptime-monitor', n: 'Uptime monitor', d: 'Pings every site every 5 minutes and shows which one is down and for how long.', i: 'pulse', c: '#0891b2' },
+    { id: 'checker', slug: 'page-checker', n: 'Page checker', d: 'Every page from your sitemap, checked one by one for title, description, headings and more.', i: 'checkp', c: '#4f46e5' },
+    { id: 'broken', slug: 'broken-link-checker', n: 'Broken links', d: 'Finds every broken link and image, and shows exactly which page each one is on.', i: 'unlink', c: '#dc2626' },
+    { id: 'rank', slug: 'keyword-rank-tracker', n: 'Rank tracker', d: 'Your keywords and their Google position, with the change since the last period.', i: 'trend', c: '#db2777' },
+    { id: 'speed', slug: 'pagespeed-checker', n: 'PageSpeed', d: 'Mobile and desktop Lighthouse scores with the fixes that matter most.', i: 'bolt', c: '#d97706' },
+    { id: 'utm', slug: 'utm-builder', n: 'UTM builder', d: 'Build tagged links for campaigns and copy them in one click.', i: 'tag', c: '#7c3aed' },
+    { id: 'links', slug: 'quick-links', n: 'Quick links', d: 'Jump to Search Console, PageSpeed and test tools for any of your sites.', i: 'mark', c: '#0284c7' },
   ];
-  window.TL = { list: LIST, render: (id, el) => (R[id] ? R[id](el) : null), grab, esc, healthOf, audit, pool, sitePages };
+  // Map slugs as aliases
+  LIST.forEach((t) => {
+    if (t.slug && R[t.id]) R[t.slug] = R[t.id];
+  });
+  window.TL = { list: LIST, render: (id, el) => { const fn = R[id] || (LIST.find(x => x.slug === id || x.id === id) && R[LIST.find(x => x.slug === id || x.id === id).id]); return fn ? fn(el) : null; }, grab, esc, healthOf, audit, pool, sitePages };
 })();

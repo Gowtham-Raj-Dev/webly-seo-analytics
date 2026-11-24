@@ -592,7 +592,8 @@ function toolsPage() {
 }
 function toolPage(t) {
   const next = `/dashboard#/tools/${t.id}`, others = PAGES.TOOLS.filter((x) => x.id !== t.id);
-  return `<div class="lp">${lpNav()}<section class="pg-hero"><div class="lp-bg" aria-hidden="true"></div>${crumbs([['Free SEO tools', '/tools/'], [t.name]])}<span class="pg-ic">${I(t.icon, 26)}</span><h1>${t.h1}</h1><p>${t.intro}</p><div class="lp-cta">${ctaBtn(`Use ${t.name} free`, next)}</div><div class="lp-trust"><span>${I('ok', 15)} Free</span><span>${I('ok', 15)} No credit card</span><span>${I('ok', 15)} Works for any website</span></div></section>
+  return `<div class="lp">${lpNav()}<section class="pg-hero"><div class="lp-bg" aria-hidden="true"></div>${crumbs([['Free SEO tools', '/tools/'], [t.name]])}<span class="pg-ic">${I(t.icon, 26)}</span><h1>${t.h1}</h1><p>${t.intro}</p><div class="lp-trust"><span>${I('ok', 15)} Free</span><span>${I('ok', 15)} No credit card</span><span>${I('ok', 15)} Instant results</span></div></section>
+    <section class="lp-sec pg-sec pg-live-tool" style="padding-top:0"><div class="card c12" id="publicToolBox" style="padding:16px;box-shadow:var(--sh-card)"></div></section>
     <section class="lp-sec pg-sec"><div class="pg-two"><div class="card pg-card"><h2>What ${t.name} checks</h2><ul class="lp-list">${t.points.map((p) => `<li>${I('ok', 16)}${p}</li>`).join('')}</ul></div><div class="card pg-card"><h2>How to use it</h2><ol class="pg-steps">${t.steps.map((s, i) => `<li><span class="lp-n">${i + 1}</span><div><b>${s[0]}</b><p>${s[1]}</p></div></li>`).join('')}</ol></div></div></section>
     <section class="lp-sec pg-sec"><div class="lp-head"><h2>More free tools</h2></div><div class="lp-tools">${others.slice(0, 6).map((x) => `<a class="lp-tool" href="${x.path}" data-nav><span class="tile">${I(x.icon, 20)}</span><h3>${x.name}</h3><p>${x.intro}</p></a>`).join('')}</div><div class="dirmore"><a class="btn o" href="/tools/" data-nav>All ${PAGES.TOOLS.length} tools ${I('arrow', 15)}</a></div></section>
     ${lpEnd()}${lpFoot()}</div>`;
@@ -742,6 +743,13 @@ async function render() {
     const html = publicPage();
     if (!html) { history.replaceState(null, '', '/'); return render(); } // unknown path: home page
     app.innerHTML = html; setMeta(); loadDir();
+    const p = location.pathname.replace(/\/?$/, '/');
+    const m = p.match(/^\/tools\/([a-z0-9-]+)\/$/);
+    const curTool = m && typeof PAGES !== 'undefined' && PAGES.bySlug && PAGES.bySlug(m[1]);
+    const toolBox = document.getElementById('publicToolBox');
+    if (curTool && toolBox && typeof TL !== 'undefined' && typeof TL.render === 'function') {
+      cleanup = TL.render(curTool.id, toolBox) || null;
+    }
     const id = location.hash.slice(1), el = id && document.getElementById(id);
     if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 40);
     return;
@@ -749,7 +757,8 @@ async function render() {
   document.title = (TITLES[route()] || TITLES[''])[0] + ' · ' + BRAND.name;
   if (!signed()) { document.body.classList.remove('busy'); app.innerHTML = signInPage(); return; }
   if (S.user && !S.demo && !S.onboarded) { document.body.classList.remove('busy'); document.title = 'Set up · ' + BRAND.name; app.innerHTML = startPage(); return; }
-  const r = route(), key = (V[r] ? r : ''), tid = key === 'tools' ? toolId() : '', tab = key === 'tools' ? '' : toolId();
+  const r = route(), key = (V[r] ? r : ''), rawTid = key === 'tools' ? toolId() : '', tab = key === 'tools' ? '' : toolId();
+  const tid = (typeof PAGES !== 'undefined' && PAGES.bySlug && PAGES.bySlug(rawTid) ? PAGES.bySlug(rawTid).id : rawTid);
   const seq = render.seq = (render.seq || 0) + 1, y = window.scrollY, ks = render.keepScroll; render.keepScroll = false;
   const what = 'Loading ' + (TITLES[key] || TITLES[''])[0] + '...';
   document.body.classList.add('busy');
@@ -758,7 +767,7 @@ async function render() {
   if (seq !== render.seq) return;
   app.innerHTML = shell(key); banner(); document.getElementById('view').innerHTML = skel(what);
   const v = document.getElementById('view');
-  if (tid && TL.list.some((t) => t.id === tid)) cleanup = TL.render(tid, v) || null;
+  if (tid && TL.list.some((t) => t.id === tid || t.slug === tid)) cleanup = TL.render(tid, v) || null;
   else { SEC.cleanup = null; let html; try { html = await V[key](tab); } catch (e) { html = '<div class="card c12" style="border-color:var(--bad)"><span class="tag bad">Problem</span> ' + esc(e.message) + '</div>'; } if (seq !== render.seq) return; v.innerHTML = html; cleanup = SEC.cleanup || null; SEC.cleanup = null; }
   document.body.classList.remove('busy');
   bindCharts(); window.scrollTo(0, ks ? y : 0);
