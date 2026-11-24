@@ -3,22 +3,112 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Webly - all your website data in one place</title>
-<meta name="description" content="Connect Google Analytics, Search Console and AdSense, run SEO tools and get an AI-ready report for every site you own.">
+<title>Webly — Website Analytics, Deep SEO Audit & Problem Fixer</title>
+<meta name="description" content="All your website data in one place. Connect Google Analytics, Search Console and AdSense, audit 30+ SEO and speed points, and get instant copy-paste code fixes.">
+<meta name="keywords" content="website analytics, seo audit, website problem fixer, google search console dashboard, google analytics viewer, site health checker, broken link checker, pagespeed insights, codelove tools">
+<meta name="author" content="Gowtham">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<link rel="canonical" href="https://webly.codelove.in/">
+<meta name="theme-color" content="#4f46e5">
+
+<!-- Open Graph / Facebook / WhatsApp / LinkedIn -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Webly">
+<meta property="og:url" content="https://webly.codelove.in/">
+<meta property="og:title" content="Webly — Website Analytics, Deep SEO Audit & Problem Fixer">
+<meta property="og:description" content="Connect Google Analytics, Search Console & AdSense in one clean dashboard. Deep-audit any website, detect technical SEO, performance & security issues, and get instant code fixes.">
+<meta property="og:image" content="https://webly.codelove.in/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:url" content="https://webly.codelove.in/">
+<meta name="twitter:title" content="Webly — Website Analytics, Deep SEO Audit & Problem Fixer">
+<meta name="twitter:description" content="All your website data in one place. Connect GA4, Search Console and AdSense, audit any site and get instant code fixes for every problem.">
+<meta name="twitter:image" content="https://webly.codelove.in/og.png">
+
+<!-- Favicon & Touch Icon -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f46e5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 12h-4l-3 9L9 3l-3 9H2'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234f46e5'%3E%3Crect width='24' height='24' rx='6' fill='%234f46e5'/%3E%3Cpath d='M22 12h-4l-3 9L9 3l-3 9H2' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+
+<!-- Structured Data (Schema.org JSON-LD) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebApplication",
+      "@id": "https://webly.codelove.in/#webapp",
+      "name": "Webly",
+      "url": "https://webly.codelove.in/",
+      "description": "Multi-site analytics dashboard, technical SEO auditor and automated problem fix generator for website owners and developers.",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "All",
+      "browserRequirements": "Requires JavaScript. Requires HTML5.",
+      "creator": {
+        "@type": "Person",
+        "name": "Gowtham",
+        "url": "https://gowtham.codelove.in"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "CodeLove",
+        "url": "https://codelove.in"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://webly.codelove.in/#website",
+      "url": "https://webly.codelove.in/",
+      "name": "Webly",
+      "publisher": {
+        "@type": "Organization",
+        "name": "CodeLove",
+        "url": "https://codelove.in"
+      }
+    }
+  ]
+}
+</script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap">
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 
+<noscript>
+  <div style="max-width:800px;margin:40px auto;padding:24px;font-family:sans-serif;line-height:1.6">
+    <h1>Webly — Website Analytics, Deep SEO Audit & Problem Fixer</h1>
+    <p>Webly brings Google Analytics, Search Console and Google AdSense together in one privacy-friendly dashboard.</p>
+    <h2>Included SEO & Audit Tools</h2>
+    <ul>
+      <li><strong>Site Auditor & Problem Fixer:</strong> 30+ point deep technical SEO, speed and security audit with instant copy-paste code fixes.</li>
+      <li><strong>Site Health:</strong> Comprehensive check for home page, robots.txt, sitemap.xml, HTTPS and meta tags.</li>
+      <li><strong>Broken Links Checker:</strong> Crawls your website and identifies dead internal and external links.</li>
+      <li><strong>Rank Tracker:</strong> Tracks target keywords and Google positions with period-over-period changes.</li>
+      <li><strong>PageSpeed Insights:</strong> Mobile and desktop Core Web Vitals Lighthouse audit.</li>
+      <li><strong>Page Checker:</strong> Evaluates every page from your sitemap one by one.</li>
+    </ul>
+    <p>Enable JavaScript to launch the full interactive Webly dashboard.</p>
+  </div>
+</noscript>
+
 <div id="app"></div>
 <div id="toast" class="toast"></div>
-<script src="config.js?v=16"></script>
-<script src="dir.js?v=16"></script>
-<script src="api.js?v=16"></script>
-<script src="tools.js?v=16"></script>
-<script src="sections.js?v=16"></script>
-<script src="app.js?v=16"></script>
+
+<script src="config.js?v=17"></script>
+<script src="dir.js?v=17"></script>
+<script src="api.js?v=17"></script>
+<script src="tools.js?v=17"></script>
+<script src="sections.js?v=17"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>
-

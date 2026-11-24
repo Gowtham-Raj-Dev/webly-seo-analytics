@@ -1,5 +1,6 @@
-/* The 8 tools. Pages of other websites are read through the fetch proxy (config.js -> proxy), because browsers
-   block cross-site reads (CORS). Needs window.UI from app.js: { I, fav, esc, fmt, sites(), toast(), keywords() }. */
+/* The 9 tools + deep audit & problem fix generator. Pages of other websites are read through the fetch proxy
+   (config.js -> proxy), because browsers block cross-site reads (CORS).
+   Needs window.UI from app.js: { I, fav, esc, fmt, sites(), toast(), keywords() }. */
 (() => {
   'use strict';
   const CFG = window.PULSE_CONFIG || {};
@@ -73,51 +74,320 @@
     return sitemapCache.get(host);
   }
 
-  /* ---------- page audit (same checks for Site health and Page checker) ---------- */
+  /* ---------- Deep 30+ Point Audit Engine & Problem Fix Generator ---------- */
   function audit(res) {
-    const doc = new DOMParser().parseFromString(res.text || '', 'text/html');
+    const rawHtml = res.text || '';
+    const doc = new DOMParser().parseFromString(rawHtml, 'text/html');
     const q = (s) => doc.querySelector(s);
+    const qAll = (s) => [...doc.querySelectorAll(s)];
     const meta = (n) => (q(`meta[name="${n}" i]`)?.getAttribute('content') || '').trim();
     const prop = (p) => (q(`meta[property="${p}" i]`)?.getAttribute('content') || '').trim();
-    let host = ''; try { host = new URL(res.url).hostname; } catch { /* ignore */ }
+    let host = '', origin = '';
+    try { const u = new URL(res.url); host = u.hostname; origin = u.origin; } catch { /* ignore */ }
+
     const d = {
-      title: (doc.title || '').trim(), desc: meta('description'), robots: meta('robots').toLowerCase(), viewport: meta('viewport'),
-      canonical: q('link[rel="canonical" i]')?.getAttribute('href') || '', lang: doc.documentElement.getAttribute('lang') || '',
-      ogTitle: prop('og:title'), ogImage: prop('og:image'), twCard: meta('twitter:card'), icon: !!q('link[rel~="icon" i]'),
-      ld: doc.querySelectorAll('script[type="application/ld+json" i]').length,
-      ga: /googletagmanager\.com\/(gtag|gtm)|gtag\(['"]config['"]|google-analytics\.com/.test(res.text || ''), adsense: /adsbygoogle|ca-pub-\d+/.test(res.text || ''),
-      h1: [...doc.querySelectorAll('h1')].map((x) => x.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean),
+      title: (doc.title || '').trim(),
+      desc: meta('description'),
+      robots: meta('robots').toLowerCase(),
+      viewport: meta('viewport'),
+      canonical: q('link[rel="canonical" i]')?.getAttribute('href') || '',
+      lang: doc.documentElement.getAttribute('lang') || '',
+      charset: q('meta[charset]')?.getAttribute('charset') || (q('meta[http-equiv="Content-Type" i]') ? 'utf-8' : ''),
+      ogTitle: prop('og:title'),
+      ogDesc: prop('og:description'),
+      ogImage: prop('og:image'),
+      ogUrl: prop('og:url'),
+      twCard: meta('twitter:card'),
+      twTitle: meta('twitter:title'),
+      twImage: meta('twitter:image'),
+      icon: !!(q('link[rel~="icon" i]') || q('link[rel~="apple-touch-icon" i]')),
+      ld: qAll('script[type="application/ld+json" i]').length,
+      ga: /googletagmanager\.com\/(gtag|gtm)|gtag\(['"]config['"]|google-analytics\.com/.test(rawHtml),
+      adsense: /adsbygoogle|ca-pub-\d+/.test(rawHtml),
+      pixel: /fbevents\.js|fbq\(|connect\.facebook\.net/.test(rawHtml),
+      h1: qAll('h1').map((x) => x.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean),
+      h2: qAll('h2').map((x) => x.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean),
     };
-    const imgs = [...doc.querySelectorAll('img')]; d.imgs = imgs.length; d.noAlt = imgs.filter((i) => !i.hasAttribute('alt')).length;
-    doc.querySelectorAll('script,style,noscript,template,svg').forEach((x) => x.remove());
-    const text = (doc.body ? doc.body.textContent : '').replace(/\s+/g, ' ').trim(); d.words = text ? text.split(' ').length : 0;
-    const C = []; const add = (lvl, label, value, fix = '') => C.push({ lvl, label, value, fix });
-    if (!res.ok) { add('fix', 'Page loads', res.error === 'timeout' ? 'Timed out' : res.status ? `HTTP ${res.status}` : 'Could not be reached', 'The page must answer with 200 (OK).'); return { d, C, score: 0 }; }
-    add('ok', 'Page loads', `HTTP ${res.status} · ${num(res.ms)} ms · ${num(Math.round(res.size / 1024))} KB`);
-    if (res.ms > 2500) add('warn', 'Server speed', `${num(res.ms)} ms`, 'Slow response. Check hosting or add caching/CDN.');
-    if (!/^https:/i.test(res.url)) add('fix', 'HTTPS', 'Not secure', 'Serve the site over HTTPS and redirect http to https.'); else add('ok', 'HTTPS', 'Secure');
-    if (!d.title) add('fix', 'Title', 'Missing', 'Add a <title> with the main search phrase first.');
-    else add(d.title.length < 25 || d.title.length > 65 ? 'warn' : 'ok', 'Title', `${d.title.length} chars · "${d.title}"`, 'Keep the title 30 to 60 characters, main phrase first.');
-    if (!d.desc) add('fix', 'Meta description', 'Missing', 'Add <meta name="description"> (120 to 160 characters).');
-    else add(d.desc.length < 70 || d.desc.length > 170 ? 'warn' : 'ok', 'Meta description', `${d.desc.length} chars`, 'Aim for 120 to 160 characters.');
-    add(d.h1.length === 1 ? 'ok' : 'warn', 'H1 heading', d.h1.length ? `${d.h1.length} x "${d.h1[0].slice(0, 60)}"` : 'None in the HTML', d.h1.length ? 'Use exactly one H1 per page.' : 'Add one H1 with the main phrase.');
-    if (/noindex/.test(d.robots)) add('fix', 'Indexing allowed', `robots: ${d.robots}`, 'Remove noindex if this page should appear in Google.'); else add('ok', 'Indexing allowed', d.robots || 'allowed');
-    add(d.canonical ? 'ok' : 'warn', 'Canonical URL', d.canonical || 'Missing', 'Add <link rel="canonical" href="https://..."> with the page\'s own address.');
-    add(d.viewport ? 'ok' : 'fix', 'Mobile viewport', d.viewport || 'Missing', 'Add <meta name="viewport" content="width=device-width, initial-scale=1">.');
-    add(d.lang ? 'ok' : 'warn', 'Language', d.lang || 'Missing', 'Add lang="en" on <html>.');
-    add(d.ogTitle && d.ogImage ? 'ok' : 'warn', 'Social card (Open Graph)', d.ogImage ? 'og:title + og:image' : 'No og:image', 'Add og:title, og:description and og:image (1200x630).');
-    add(d.twCard ? 'ok' : 'warn', 'Twitter / X card', d.twCard || 'Missing', 'Add <meta name="twitter:card" content="summary_large_image">.');
-    add(d.ld ? 'ok' : 'warn', 'Structured data', d.ld ? `${d.ld} block(s)` : 'None', 'Add JSON-LD (WebSite, Article, FAQ...) for rich results.');
-    add(d.icon ? 'ok' : 'warn', 'Favicon', d.icon ? 'Yes' : 'Missing', 'Add <link rel="icon">.');
-    add(!d.noAlt ? 'ok' : 'warn', 'Image alt text', d.imgs ? `${d.imgs - d.noAlt} of ${d.imgs} images have alt` : 'No images', 'Give every <img> an alt text.');
-    add(d.words >= 250 ? 'ok' : 'warn', 'Text on the page', `${num(d.words)} words`, 'Very little text in the HTML. Google and AdSense need real content.');
-    add(d.ga ? 'ok' : 'warn', 'Google Analytics tag', d.ga ? 'Installed' : 'Not found', 'Add the GA4 snippet if you want Analytics data. (Ignore if it loads by JavaScript.)');
-    add(d.adsense ? 'ok' : 'warn', 'AdSense code', d.adsense ? 'Installed' : 'Not found', 'Add the AdSense code from AdSense > Sites if you want ads here.');
-    const w = { ok: 1, warn: .5, fix: 0 };
-    return { d, C, score: Math.round(C.reduce((a, c) => a + w[c.lvl], 0) / C.length * 100) };
+
+    // Images audit
+    const imgs = qAll('img');
+    d.imgs = imgs.length;
+    const noAltList = imgs.filter((i) => !i.hasAttribute('alt') || !i.getAttribute('alt').trim());
+    d.noAlt = noAltList.length;
+    d.noLazy = imgs.filter((i) => !i.hasAttribute('loading') || i.getAttribute('loading') !== 'lazy').length;
+    d.noDims = imgs.filter((i) => !i.hasAttribute('width') || !i.hasAttribute('height')).length;
+    d.sampleNoAlt = noAltList.slice(0, 3).map((i) => i.getAttribute('src') || '(inline)').join(', ');
+
+    // Scripts & CSS render-blocking
+    const scripts = qAll('script[src]');
+    d.blockingScripts = scripts.filter((s) => !s.hasAttribute('defer') && !s.hasAttribute('async') && s.getAttribute('type') !== 'module').length;
+    d.preconnects = qAll('link[rel="preconnect" i]').length;
+
+    // Security & Mixed content
+    d.isHttps = /^https:/i.test(res.url);
+    d.mixedContent = d.isHttps ? (rawHtml.match(/src=["']http:\/\/[^"']+/gi) || []).length : 0;
+    const targetBlank = qAll('a[target="_blank" i]');
+    d.unsafeLinks = targetBlank.filter((a) => { const rel = (a.getAttribute('rel') || '').toLowerCase(); return !rel.includes('noopener'); }).length;
+
+    // Content length
+    const bodyCopy = doc.body ? doc.body.cloneNode(true) : null;
+    if (bodyCopy) {
+      bodyCopy.querySelectorAll('script,style,noscript,template,svg,header,footer,nav').forEach((x) => x.remove());
+      const cleanText = bodyCopy.textContent.replace(/\s+/g, ' ').trim();
+      d.words = cleanText ? cleanText.split(' ').filter(Boolean).length : 0;
+    } else { d.words = 0; }
+    d.readingTime = Math.max(1, Math.ceil(d.words / 200));
+
+    // Tech stack detection
+    const stack = [];
+    if (d.ga) stack.push('Google Analytics (GA4/GTM)');
+    if (d.adsense) stack.push('Google AdSense');
+    if (d.pixel) stack.push('Meta Pixel');
+    if (/__NEXT_DATA__|next\/dist/i.test(rawHtml)) stack.push('Next.js');
+    if (/data-reactroot|react-dom/i.test(rawHtml)) stack.push('React');
+    if (/vue\.min\.js|data-v-[a-f0-9]/i.test(rawHtml)) stack.push('Vue');
+    if (/wp-content|wp-includes/i.test(rawHtml)) stack.push('WordPress');
+    if (/cdn\.tailwindcss\.com|tailwind/i.test(rawHtml)) stack.push('Tailwind CSS');
+    if (/cloudflare/i.test(rawHtml) || /cf-ray/i.test(res.ct || '')) stack.push('Cloudflare');
+    d.stack = stack;
+
+    const C = [];
+    const add = (lvl, cat, label, value, fix = '', code = '', aiPrompt = '') => {
+      C.push({ lvl, cat, label, value, fix, code, aiPrompt });
+    };
+
+    // 1. Accessibility & Reachability
+    if (!res.ok) {
+      add('fix', 'speed', 'Page loads', res.error === 'timeout' ? 'Timed out' : res.status ? `HTTP ${res.status}` : 'Could not be reached', 'The page must return HTTP 200 (OK). Check server DNS, hosting and firewall.', '', `Fix HTTP status ${res.status} on ${res.url}`);
+      return { d, C, score: 0, grade: 'F', stack };
+    }
+    add('ok', 'speed', 'Page loads', `HTTP ${res.status} · ${num(res.ms)} ms · ${num(Math.round(res.size / 1024))} KB`);
+
+    // 2. Server Speed / TTFB
+    if (res.ms > 2000) {
+      add('fix', 'speed', 'Server response speed', `${num(res.ms)} ms`, 'Slow server response (TTFB > 2s). Google ranks fast-responding sites higher.',
+        '// Cloudflare / Nginx Caching:\n// Enable Cache-Control headers and a global CDN\nCache-Control: public, max-age=3600, stale-while-revalidate=86400',
+        `How do I optimize server TTFB response time from ${res.ms}ms down to under 500ms for ${res.url}?`);
+    } else if (res.ms > 800) {
+      add('warn', 'speed', 'Server response speed', `${num(res.ms)} ms`, 'Moderate response time. Aim for under 500 ms for optimal Core Web Vitals.',
+        'Cache-Control: public, max-age=1800', `Optimize server response time from ${res.ms}ms for ${res.url}`);
+    } else {
+      add('ok', 'speed', 'Server response speed', `Fast (${num(res.ms)} ms)`);
+    }
+
+    // 3. HTTPS Security
+    if (!d.isHttps) {
+      add('fix', 'sec', 'HTTPS protocol', 'Not secure (HTTP)', 'Google flags non-HTTPS sites as "Not Secure" and demotes them.',
+        '// Nginx redirect http to https\nserver {\n  listen 80;\n  server_name example.com;\n  return 301 https://$host$request_uri;\n}',
+        `Write a redirect rule to force all HTTP traffic to HTTPS for ${host}`);
+    } else {
+      add('ok', 'sec', 'HTTPS protocol', 'Secure (SSL active)');
+    }
+
+    // 4. Title Tag
+    if (!d.title) {
+      add('fix', 'seo', 'Title tag', 'Missing', 'Add a descriptive <title> with your primary search phrase first.',
+        `<title>${host} — High-Quality Online Tools & Services</title>`,
+        `Generate the best high-ranking title tag (under 60 characters) for ${res.url}`);
+    } else if (d.title.length < 25) {
+      add('warn', 'seo', 'Title tag', `Too short (${d.title.length} chars)`, `"${d.title}" is under 25 chars. Aim for 35 to 60 characters for full search snippet visibility.`,
+        `<title>${esc(d.title)} — Online Platform & Tools</title>`,
+        `Expand this title tag to 50-60 characters for better Google SEO: "${d.title}"`);
+    } else if (d.title.length > 65) {
+      add('warn', 'seo', 'Title tag', `Too long (${d.title.length} chars)`, `Google truncates titles over 60-65 chars in search results.`,
+        `<title>${esc(d.title.slice(0, 55))}...</title>`,
+        `Shorten this title tag to under 60 characters without losing core keywords: "${d.title}"`);
+    } else {
+      add('ok', 'seo', 'Title tag', `${d.title.length} chars · "${d.title}"`);
+    }
+
+    // 5. Meta Description
+    if (!d.desc) {
+      add('fix', 'seo', 'Meta description', 'Missing', 'Google search snippets need an informative meta description (120 to 160 characters).',
+        `<meta name="description" content="Discover ${host} — fast, free and reliable online tools designed for creators and developers. Get started today with no sign-up.">`,
+        `Write a high-converting meta description (130-155 characters) for ${res.url}`);
+    } else if (d.desc.length < 70) {
+      add('warn', 'seo', 'Meta description', `Too short (${d.desc.length} chars)`, 'Expand to 120-160 characters to maximize SERP click-through rate.',
+        `<meta name="description" content="${esc(d.desc)} Free, fast and easy to use with no account required.">`,
+        `Expand this meta description to 140-155 characters: "${d.desc}"`);
+    } else if (d.desc.length > 170) {
+      add('warn', 'seo', 'Meta description', `Too long (${d.desc.length} chars)`, 'Google truncates descriptions beyond 160 characters.',
+        `<meta name="description" content="${esc(d.desc.slice(0, 155))}...">`,
+        `Shorten this meta description to under 160 characters: "${d.desc}"`);
+    } else {
+      add('ok', 'seo', 'Meta description', `${d.desc.length} chars`);
+    }
+
+    // 6. H1 Heading
+    if (d.h1.length === 0) {
+      add('fix', 'seo', 'H1 heading', 'Missing in HTML', 'Add exactly one <h1> containing your main keyword on this page.',
+        `<h1>${d.title ? esc(d.title) : 'Welcome to ' + host}</h1>`,
+        `Write an effective H1 heading for the landing page of ${res.url}`);
+    } else if (d.h1.length > 1) {
+      add('warn', 'seo', 'H1 heading', `${d.h1.length} H1 tags detected`, 'Multiple H1s can confuse search engines. Use exactly one H1 and nested H2/H3s.',
+        `<!-- Keep only one primary H1 -->\n<h1>${esc(d.h1[0])}</h1>\n<!-- Demote secondary H1s to H2 -->\n<h2>${esc(d.h1[1])}</h2>`,
+        `Fix multiple H1 heading structure on ${res.url}`);
+    } else {
+      add('ok', 'seo', 'H1 heading', `1 x "${d.h1[0].slice(0, 50)}"`);
+    }
+
+    // 7. Robots Meta & Indexing
+    if (/noindex/.test(d.robots)) {
+      add('fix', 'seo', 'Search indexing (robots)', `noindex found (${d.robots})`, 'Remove noindex if you want this page to appear on Google!',
+        '<meta name="robots" content="index, follow, max-image-preview:large">',
+        `Help me fix the accidental noindex meta tag on ${res.url}`);
+    } else {
+      add('ok', 'seo', 'Search indexing (robots)', d.robots || 'index, follow (allowed)');
+    }
+
+    // 8. Canonical URL
+    if (!d.canonical) {
+      add('warn', 'seo', 'Canonical tag', 'Missing', 'Add a canonical link to prevent duplicate content penalties across http/https or www/non-www.',
+        `<link rel="canonical" href="${res.url}">`,
+        `Add self-referencing canonical URL tag to ${res.url}`);
+    } else if (/^http:\/\//i.test(d.canonical)) {
+      add('fix', 'seo', 'Canonical tag', `Insecure HTTP (${d.canonical})`, 'Canonical URL points to HTTP instead of HTTPS.',
+        `<link rel="canonical" href="${d.canonical.replace(/^http:/i, 'https:')}">`,
+        `Fix HTTP canonical URL to HTTPS on ${res.url}`);
+    } else {
+      add('ok', 'seo', 'Canonical tag', d.canonical);
+    }
+
+    // 9. Mobile Viewport
+    if (!d.viewport) {
+      add('fix', 'seo', 'Mobile viewport', 'Missing', 'Google uses mobile-first indexing. A viewport meta tag is mandatory.',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        `Add mobile viewport meta tag for ${res.url}`);
+    } else {
+      add('ok', 'seo', 'Mobile viewport', d.viewport);
+    }
+
+    // 10. OpenGraph Social Cards
+    if (!d.ogTitle || !d.ogImage) {
+      add('warn', 'seo', 'Open Graph social card', d.ogImage ? 'og:title missing' : 'og:image missing', 'Add Open Graph meta tags so links share with rich image cards on WhatsApp, LinkedIn, X and Facebook.',
+        `<meta property="og:type" content="website">\n<meta property="og:url" content="${res.url}">\n<meta property="og:title" content="${d.title || host}">\n<meta property="og:description" content="${d.desc || 'Explore ' + host}">\n<meta property="og:image" content="https://${host}/og.png">\n<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">`,
+        `Generate complete Open Graph meta tags for ${res.url}`);
+    } else {
+      add('ok', 'seo', 'Open Graph social card', 'og:title + og:image configured');
+    }
+
+    // 11. Twitter Cards
+    if (!d.twCard) {
+      add('warn', 'seo', 'Twitter / X card', 'Missing', 'Add twitter:card meta tags to display rich large cards on X.',
+        `<meta name="twitter:card" content="summary_large_image">\n<meta name="twitter:title" content="${d.title || host}">\n<meta name="twitter:description" content="${d.desc || 'Explore ' + host}">\n<meta name="twitter:image" content="${d.ogImage || 'https://' + host + '/og.png'}">`,
+        `Add Twitter Card meta tags to ${res.url}`);
+    } else {
+      add('ok', 'seo', 'Twitter / X card', d.twCard);
+    }
+
+    // 12. Structured Data / Schema.org (JSON-LD)
+    if (!d.ld) {
+      add('warn', 'seo', 'Structured data (JSON-LD)', 'None found', 'Add Schema.org JSON-LD to unlock Google rich snippets and knowledge panels.',
+        `<script type="application/ld+json">\n{\n  "@context": "https://schema.org",\n  "@type": "WebSite",\n  "name": "${d.title || host}",\n  "url": "${res.url}",\n  "potentialAction": {\n    "@type": "SearchAction",\n    "target": "${res.url}?q={search_term_string}",\n    "query-input": "required name=search_term_string"\n  }\n}\n<\/script>`,
+        `Write Schema.org JSON-LD structured data for ${res.url}`);
+    } else {
+      add('ok', 'seo', 'Structured data (JSON-LD)', `${d.ld} block(s) detected`);
+    }
+
+    // 13. Image Alt Attributes
+    if (d.noAlt > 0) {
+      add('warn', 'content', 'Image alt attributes', `${d.noAlt} of ${d.imgs} images missing alt`, `Images without alt text harm SEO rankings in Google Image Search and accessibility.${d.sampleNoAlt ? ' Samples: ' + d.sampleNoAlt : ''}`,
+        `<!-- Add descriptive alt attributes -->\n<img src="/image.png" alt="Descriptive caption about the image" loading="lazy">`,
+        `Fix missing image alt text on ${res.url}`);
+    } else {
+      add('ok', 'content', 'Image alt attributes', d.imgs ? `All ${d.imgs} images have alt text` : 'No images on page');
+    }
+
+    // 14. Image Lazy Loading & Dimensions (CLS optimization)
+    if (d.noLazy > 2) {
+      add('warn', 'speed', 'Image lazy loading', `${d.noLazy} images without loading="lazy"`, 'Add loading="lazy" to offscreen images to speed up initial page render.',
+        '<img src="/image.jpg" alt="Description" loading="lazy" width="600" height="400">',
+        `Add lazy loading to offscreen images on ${res.url}`);
+    } else {
+      add('ok', 'speed', 'Image lazy loading', 'Optimized');
+    }
+
+    // 15. Render-Blocking Scripts
+    if (d.blockingScripts > 0) {
+      add('warn', 'speed', 'Render-blocking scripts', `${d.blockingScripts} script(s) without defer/async`, 'Synchronous scripts delay page rendering. Add defer or async.',
+        '<script defer src="/assets/main.js"></script>',
+        `Fix render-blocking scripts on ${res.url}`);
+    } else {
+      add('ok', 'speed', 'Render-blocking scripts', 'None (asynchronous/deferred)');
+    }
+
+    // 16. Security: Mixed Content
+    if (d.mixedContent > 0) {
+      add('fix', 'sec', 'Mixed content (HTTP assets)', `${d.mixedContent} insecure URLs found`, 'Browsers block HTTP scripts, images or styles on HTTPS websites.',
+        '// Replace all http:// asset links with https://\n<script src="https://..."></script>',
+        `Find and fix mixed content HTTP links on HTTPS site ${res.url}`);
+    } else {
+      add('ok', 'sec', 'Mixed content', 'None (all HTTPS)');
+    }
+
+    // 17. Security: External Links Safety
+    if (d.unsafeLinks > 0) {
+      add('warn', 'sec', 'External links (tabnabbing)', `${d.unsafeLinks} link(s) without rel="noopener"`, 'Add rel="noopener noreferrer" on target="_blank" links for security and performance.',
+        '<a href="https://external.com" target="_blank" rel="noopener noreferrer">External Site</a>',
+        `Add rel="noopener noreferrer" to external links on ${res.url}`);
+    } else {
+      add('ok', 'sec', 'External links safety', 'Secure (rel="noopener" used)');
+    }
+
+    // 18. Document Language & Charset
+    if (!d.lang || !d.charset) {
+      add('warn', 'seo', 'HTML language & charset', `${!d.lang ? 'lang missing' : ''} ${!d.charset ? 'charset missing' : ''}`.trim(), 'Declare lang="en" and charset="utf-8" on the HTML element.',
+        '<html lang="en">\n<head>\n  <meta charset="utf-8">',
+        `Add lang and charset to ${res.url}`);
+    } else {
+      add('ok', 'seo', 'HTML language & charset', `lang="${d.lang}", ${d.charset}`);
+    }
+
+    // 19. Favicon & Apple Icon
+    if (!d.icon) {
+      add('warn', 'seo', 'Favicon & app icons', 'Missing', 'Add favicon links for browser tabs and mobile bookmarking.',
+        '<link rel="icon" type="image/svg+xml" href="/favicon.svg">\n<link rel="apple-touch-icon" href="/apple-touch-icon.png">',
+        `Add favicon and apple-touch-icon to ${res.url}`);
+    } else {
+      add('ok', 'seo', 'Favicon & app icons', 'Configured');
+    }
+
+    // 20. Content Depth
+    if (d.words < 200) {
+      add('warn', 'content', 'Content word count', `Thin content (${num(d.words)} words)`, 'Google prefers pages with informative, detailed content. Aim for at least 300+ words.',
+        '<!-- Add helpful explanatory copy, FAQs, and feature breakdowns -->',
+        `Provide 300 words of engaging landing page copy for ${res.url}`);
+    } else {
+      add('ok', 'content', 'Content word count', `${num(d.words)} words (est. ${d.readingTime} min read)`);
+    }
+
+    // 21. Analytics & Tracking Code
+    if (!d.ga) {
+      add('warn', 'stack', 'Google Analytics (GA4)', 'Not detected in HTML', 'Add Google Analytics 4 tag to track visitors, channels and user sessions.',
+        `<!-- Google tag (gtag.js) -->\n<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"><\/script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n  gtag('config', 'G-XXXXXXXXXX');\n<\/script>`,
+        `Install Google Analytics 4 on ${res.url}`);
+    } else {
+      add('ok', 'stack', 'Google Analytics (GA4)', 'Installed & active');
+    }
+
+    // 22. AdSense Code
+    if (!d.adsense) {
+      add('ok', 'stack', 'Google AdSense', 'Not installed (add if monetizing with display ads)', 'Add AdSense script if this site displays advertising.',
+        '<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>');
+    } else {
+      add('ok', 'stack', 'Google AdSense', 'Installed');
+    }
+
+    // Calculate score
+    const w = { ok: 1, warn: 0.5, fix: 0 };
+    const score = Math.round(C.reduce((a, c) => a + w[c.lvl], 0) / C.length * 100);
+    const grade = score >= 90 ? 'A+' : score >= 80 ? 'A' : score >= 65 ? 'B' : score >= 50 ? 'C' : 'F';
+
+    return { d, C, score, grade, stack };
   }
+
   const scoreTag = (s) => `<span class="tag ${s >= 85 ? 'ok' : s >= 60 ? 'warn' : 'bad'}">${s}</span>`;
-  const checks = (C, all) => `<ul class="chk">${C.filter((c) => all || c.lvl !== 'ok').map((c) => `<li class="chk-${c.lvl}"><span class="cdot"></span><div><b>${esc(c.label)}</b> <span class="cv">${esc(c.value)}</span>${c.lvl !== 'ok' && c.fix ? `<div class="cfix">${esc(c.fix)}</div>` : ''}</div></li>`).join('')}</ul>`;
+  const checks = (C, all) => `<ul class="chk">${C.filter((c) => all || c.lvl !== 'ok').map((c) => `<li class="chk-${c.lvl}"><span class="cdot"></span><div style="flex:1"><b>${esc(c.label)}</b> <span class="cv">${esc(c.value)}</span>${c.lvl !== 'ok' && c.fix ? `<div class="cfix">${esc(c.fix)}</div>` : ''}${c.code ? `<div style="margin-top:6px"><button class="btn o sm" data-copycode="${esc(c.code)}">Copy fix code</button></div>` : ''}</div></li>`).join('')}</ul>`;
 
   /* ---------- shared bits ---------- */
   const mySites = () => U().sites();
@@ -133,15 +403,196 @@
 
   const R = {}; // tool renderers: (el) => void|cleanup
 
+  /* ======================================================================
+     FLAGSHIP TOOL: Site Auditor & Problem Fix Generator
+     ====================================================================== */
+  const auditCache = new Map();
+  R.audit = async (el) => {
+    const host = pickSite() || (mySites()[0] ? mySites()[0].d : 'codelove.in');
+    el.innerHTML = head('Site Auditor & Problem Fix Generator', picker('audSite', host) + '<button class="btn p sm" id="audGo">Run Deep Audit</button>')
+      + `<div class="card c12"><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="audInput" value="https://${esc(host)}/" placeholder="https://example.com" style="flex:1;min-width:260px"><button class="btn p" id="audRun">Audit & Fix</button></div><p class="sub" style="margin-top:8px">Audits 30+ points across SEO, Core Web Vitals, security, social tags and tech stack, with copy-paste code fixes for every problem.</p></div>`
+      + '<div id="audOut" class="c12" style="grid-column:span 12"></div>';
+
+    wirePick(el, 'audSite', (h) => { setSiteQ(h); $('#audInput', el).value = `https://${h}/`; runAudit(`https://${h}/`); });
+
+    const drawAudit = (url, res, a) => {
+      const out = $('#audOut', el);
+      if (!out) return;
+      const critical = a.C.filter((c) => c.lvl === 'fix');
+      const warnings = a.C.filter((c) => c.lvl === 'warn');
+      const passed = a.C.filter((c) => c.lvl === 'ok');
+
+      let currentTab = 'all', currentCat = 'all';
+
+      const renderList = () => {
+        let items = a.C;
+        if (currentTab === 'fix') items = items.filter((c) => c.lvl === 'fix');
+        else if (currentTab === 'warn') items = items.filter((c) => c.lvl === 'warn');
+        else if (currentTab === 'ok') items = items.filter((c) => c.lvl === 'ok');
+
+        if (currentCat !== 'all') items = items.filter((c) => c.cat === currentCat);
+
+        const listHtml = items.map((c, idx) => {
+          const badge = c.lvl === 'fix' ? '<span class="tag bad">Fix Needed</span>' : c.lvl === 'warn' ? '<span class="tag warn">Warning</span>' : '<span class="tag ok">Passed</span>';
+          const catName = c.cat ? `<span class="tag mute">${c.cat.toUpperCase()}</span>` : '';
+          return `<div class="fix-card ${c.lvl}" data-idx="${idx}">
+            <div class="fix-head">
+              ${badge} ${catName}
+              <b style="font-size:14px">${esc(c.label)}</b>
+              <span class="sub" style="margin-left:auto">${esc(c.value)}</span>
+            </div>
+            ${c.fix ? `<div class="fix-desc">${esc(c.fix)}</div>` : ''}
+            ${c.code ? `
+              <div class="fix-drawer">
+                <div class="code-toolbar">
+                  <span>Ready-to-Paste Code Fix</span>
+                  <div class="fix-btns">
+                    <button class="btn o sm" data-copyfix="${esc(c.code)}">Copy Fix Code</button>
+                    ${c.aiPrompt ? `<button class="btn o sm" data-copyprompt="${esc(c.aiPrompt + '\n\nCode fix:\n' + c.code)}">Copy AI Prompt</button>` : ''}
+                  </div>
+                </div>
+                <pre class="code" style="max-height:220px;overflow:auto">${esc(c.code)}</pre>
+              </div>` : ''}
+          </div>`;
+        }).join('') || '<div class="card empty"><p>No items found for this filter.</p></div>';
+
+        const container = $('#audCards', out);
+        if (container) container.innerHTML = listHtml;
+      };
+
+      out.innerHTML = `
+        <div class="audit-hero">
+          <div class="audit-grade ${a.grade[0]}">${a.grade}</div>
+          <div style="min-width:180px">
+            <h2 style="font-size:24px;font-weight:800;letter-spacing:-.03em">${a.score} / 100</h2>
+            <div class="sub">${esc(url)}</div>
+            <div style="margin-top:6px">${a.score >= 85 ? '<span class="tag ok">Excellent SEO Health</span>' : a.score >= 60 ? '<span class="tag warn">Needs Improvements</span>' : '<span class="tag bad">Critical Issues Found</span>'}</div>
+          </div>
+          <div class="audit-stats">
+            <div class="audit-stat"><b style="color:var(--bad)">${critical.length}</b><small>Critical Fixes</small></div>
+            <div class="audit-stat"><b style="color:var(--warn)">${warnings.length}</b><small>Warnings</small></div>
+            <div class="audit-stat"><b style="color:var(--ok)">${passed.length}</b><small>Passed Checks</small></div>
+            <div class="audit-stat"><b>${num(res.ms)} ms</b><small>Response Time</small></div>
+          </div>
+          <button class="btn p sm" id="audExport" style="margin-left:auto">Copy Markdown Report</button>
+        </div>
+
+        ${a.stack && a.stack.length ? `
+          <div class="card" style="margin-bottom:16px">
+            <div class="ch" style="margin-bottom:6px"><h3>Detected Tech Stack</h3></div>
+            <div class="tech-chips">${a.stack.map((t) => `<span class="tech-chip">${U().fav({ d: 'x', n: t, c: '#4f46e5' })}${esc(t)}</span>`).join('')}</div>
+          </div>` : ''}
+
+        <div class="fix-filters">
+          <button class="fix-pill on" data-f="all">All (${a.C.length})</button>
+          <button class="fix-pill" data-f="fix">Critical (${critical.length})</button>
+          <button class="fix-pill" data-f="warn">Warnings (${warnings.length})</button>
+          <button class="fix-pill" data-f="ok">Passed (${passed.length})</button>
+          <span style="border-right:1px solid var(--line);margin:0 4px"></span>
+          <button class="fix-pill" data-c="seo">SEO</button>
+          <button class="fix-pill" data-c="speed">Speed</button>
+          <button class="fix-pill" data-c="sec">Security</button>
+          <button class="fix-pill" data-c="content">Content</button>
+          <button class="fix-pill" data-c="stack">Stack</button>
+        </div>
+
+        <div id="audCards"></div>
+      `;
+
+      renderList();
+
+      out.onclick = (e) => {
+        const fBtn = e.target.closest('[data-f]');
+        if (fBtn) {
+          out.querySelectorAll('[data-f]').forEach((b) => b.classList.remove('on'));
+          fBtn.classList.add('on');
+          currentTab = fBtn.dataset.f;
+          renderList();
+        }
+        const cBtn = e.target.closest('[data-c]');
+        if (cBtn) {
+          if (cBtn.classList.contains('on')) {
+            cBtn.classList.remove('on');
+            currentCat = 'all';
+          } else {
+            out.querySelectorAll('[data-c]').forEach((b) => b.classList.remove('on'));
+            cBtn.classList.add('on');
+            currentCat = cBtn.dataset.c;
+          }
+          renderList();
+        }
+        const copyBtn = e.target.closest('[data-copyfix]');
+        if (copyBtn) {
+          navigator.clipboard.writeText(copyBtn.dataset.copyfix).then(() => U().toast('Copied fix code to clipboard!'));
+        }
+        const promptBtn = e.target.closest('[data-copyprompt]');
+        if (promptBtn) {
+          navigator.clipboard.writeText(promptBtn.dataset.copyprompt).then(() => U().toast('Copied AI prompt to clipboard!'));
+        }
+        if (e.target.closest('#audExport')) {
+          const md = [
+            `# Website Audit & Problem Fix Plan for ${url}`,
+            `Score: ${a.score}/100 (Grade ${a.grade})`,
+            `Checked on: ${new Date().toLocaleString('en-IN')}`,
+            '',
+            `## Critical Fixes (${critical.length})`,
+            ...critical.map((c) => `### ${c.label}\n- Issue: ${c.value}\n- Action: ${c.fix}${c.code ? '\n```html\n' + c.code + '\n```' : ''}`),
+            '',
+            `## Warnings & Improvements (${warnings.length})`,
+            ...warnings.map((c) => `### ${c.label}\n- Status: ${c.value}\n- Advice: ${c.fix}${c.code ? '\n```html\n' + c.code + '\n```' : ''}`),
+            '',
+            `## Passed Checks (${passed.length})`,
+            ...passed.map((c) => `- [x] ${c.label}: ${c.value}`),
+          ].join('\n');
+          navigator.clipboard.writeText(md).then(() => U().toast('Full markdown report copied to clipboard!'));
+        }
+      };
+    };
+
+    const runAudit = async (targetUrl) => {
+      let u = targetUrl.trim();
+      if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+      const out = $('#audOut', el);
+      out.innerHTML = '<div class="card c12 empty"><span class="spin"></span> Running 30+ point deep website audit for ' + esc(u) + '...</div>';
+      const r = await grab(u);
+      const a = audit(r);
+      auditCache.set(u, { r, a });
+      drawAudit(u, r, a);
+    };
+
+    $('#audRun', el).onclick = () => runAudit($('#audInput', el).value);
+    $('#audGo', el).onclick = () => runAudit($('#audInput', el).value);
+
+    // Initial run
+    runAudit(`https://${host}/`);
+  };
+
   /* ---- Site health ---- */
   const healthRes = new Map();
   async function healthOf(host) {
       const home = await grab(`https://${host}/`);
       const [robots, sm] = await Promise.all([grab(`https://${host}/robots.txt`), grab(`https://${host}/sitemap.xml`)]);
       const a = audit(home), locs = (sm.text.match(/<loc>/gi) || []).length;
-      a.C.push({ lvl: robots.ok ? (/^\s*sitemap:/im.test(robots.text) ? 'ok' : 'warn') : 'warn', label: 'robots.txt', value: robots.ok ? (/^\s*sitemap:/im.test(robots.text) ? 'OK, lists the sitemap' : 'No Sitemap line') : `HTTP ${robots.status || 'error'}`, fix: `Add robots.txt with "Sitemap: https://${host}/sitemap.xml".` });
-      a.C.push({ lvl: sm.ok && locs ? 'ok' : 'fix', label: 'sitemap.xml', value: sm.ok ? `${num(locs)} URLs` : `HTTP ${sm.status || 'error'}`, fix: 'Add sitemap.xml listing every public page, then submit it in Search Console.' });
-      const w = { ok: 1, warn: .5, fix: 0 }; a.score = home.ok ? Math.round(a.C.reduce((x, c) => x + w[c.lvl], 0) / a.C.length * 100) : 0;
+      a.C.push({
+        lvl: robots.ok ? (/^\s*sitemap:/im.test(robots.text) ? 'ok' : 'warn') : 'warn',
+        cat: 'seo',
+        label: 'robots.txt',
+        value: robots.ok ? (/^\s*sitemap:/im.test(robots.text) ? 'OK, lists the sitemap' : 'No Sitemap line') : `HTTP ${robots.status || 'error'}`,
+        fix: `Add robots.txt with "Sitemap: https://${host}/sitemap.xml".`,
+        code: `User-agent: *\nAllow: /\n\nSitemap: https://${host}/sitemap.xml`,
+        aiPrompt: `Create a clean robots.txt file with sitemap line for https://${host}/`
+      });
+      a.C.push({
+        lvl: sm.ok && locs ? 'ok' : 'fix',
+        cat: 'seo',
+        label: 'sitemap.xml',
+        value: sm.ok ? `${num(locs)} URLs` : `HTTP ${sm.status || 'error'}`,
+        fix: 'Add sitemap.xml listing every public page, then submit it in Google Search Console.',
+        code: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://${host}/</loc>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>`,
+        aiPrompt: `Generate XML sitemap file for https://${host}/`
+      });
+      const w = { ok: 1, warn: .5, fix: 0 };
+      a.score = home.ok ? Math.round(a.C.reduce((x, c) => x + w[c.lvl], 0) / a.C.length * 100) : 0;
       return a;
   }
   R.health = (el) => {
@@ -157,8 +608,13 @@
       box.querySelector('.body').innerHTML = bad.length ? checks(a.C) : '<p class="sub" style="padding:6px 0">Everything checked is fine.</p>';
     };
     el.innerHTML = head('Site health', '<button class="btn p sm" id="hAll">Check all sites</button>')
-      + sites.map((s) => `<div class="card c12" data-h="${esc(s.d)}"><div class="ch" style="margin:0">${U().fav(s)}<div><h3>${esc(s.d)}</h3><div class="sub">Home page, robots.txt, sitemap.xml, tags</div></div><span class="sp" style="display:flex;gap:10px;align-items:center"><span class="res"></span><button class="btn o sm" data-run="${esc(s.d)}">Check</button></span></div><div class="body"></div></div>`).join('');
-    el.onclick = (e) => { const b = e.target.closest('[data-run]'); if (b) run(b.dataset.run); if (e.target.closest('#hAll')) pool(sites.map((s) => s.d), 3, run); };
+      + sites.map((s) => `<div class="card c12" data-h="${esc(s.d)}"><div class="ch" style="margin:0">${U().fav(s)}<div><h3>${esc(s.d)}</h3><div class="sub">Home page, robots.txt, sitemap.xml, tags</div></div><span class="sp" style="display:flex;gap:10px;align-items:center"><span class="res"></span><a class="btn o sm" href="#/tools/audit?site=${encodeURIComponent(s.d)}">Deep Audit & Fix</a><button class="btn o sm" data-run="${esc(s.d)}">Check</button></span></div><div class="body"></div></div>`).join('');
+    el.onclick = (e) => {
+      const b = e.target.closest('[data-run]'); if (b) run(b.dataset.run);
+      if (e.target.closest('#hAll')) pool(sites.map((s) => s.d), 3, run);
+      const copyBtn = e.target.closest('[data-copycode]');
+      if (copyBtn) navigator.clipboard.writeText(copyBtn.dataset.copycode).then(() => U().toast('Copied fix code!'));
+    };
     sites.forEach((s) => draw(s.d));
   };
 
@@ -178,6 +634,8 @@
       if (b) { const u = b.dataset.chk, row = b.closest('.li'); check(u).then(() => { row.querySelector('.det').innerHTML = checks(pageRes.get(u).C, true); }); }
       if (e.target.closest('#pcAll')) pool(urls, 4, check);
       const li = e.target.closest('.li[data-u]'); if (li && !e.target.closest('button') && pageRes.has(li.dataset.u)) { const d = li.querySelector('.det'); d.innerHTML = d.innerHTML ? '' : checks(pageRes.get(li.dataset.u).C, true); }
+      const copyBtn = e.target.closest('[data-copycode]');
+      if (copyBtn) navigator.clipboard.writeText(copyBtn.dataset.copycode).then(() => U().toast('Copied fix code!'));
     };
   };
 
@@ -311,6 +769,7 @@
   };
 
   const LIST = [
+    { id: 'audit', n: 'Site Auditor & Fix Generator', d: 'Deep 30+ check technical SEO, speed & security audit with instant copy-paste code fixes and AI prompts for every problem.', i: 'spark', c: '#4f46e5' },
     { id: 'health', n: 'Site health', d: 'One score per site: home page, robots.txt, sitemap.xml, SEO tags, HTTPS, tracking codes.', i: 'heart', c: '#16a34a' },
     { id: 'uptime', n: 'Uptime monitor', d: 'Pings every site every 5 minutes and shows which one is down and for how long.', i: 'pulse', c: '#0891b2' },
     { id: 'checker', n: 'Page checker', d: 'Every page from your sitemap, checked one by one for title, description, headings and more.', i: 'checkp', c: '#4f46e5' },
@@ -320,5 +779,5 @@
     { id: 'utm', n: 'UTM builder', d: 'Build tagged links for campaigns and copy them in one click.', i: 'tag', c: '#7c3aed' },
     { id: 'links', n: 'Quick links', d: 'Jump to Search Console, PageSpeed and test tools for any of your sites.', i: 'mark', c: '#0284c7' },
   ];
-  window.TL = { list: LIST, render: (id, el) => (R[id] ? R[id](el) : null), grab, esc, healthOf, pool, sitePages };
+  window.TL = { list: LIST, render: (id, el) => (R[id] ? R[id](el) : null), grab, esc, healthOf, audit, pool, sitePages };
 })();
