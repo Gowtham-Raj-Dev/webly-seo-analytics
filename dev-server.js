@@ -47,7 +47,9 @@ http.createServer(async (req, res) => {
     catch (e) { res.end(JSON.stringify({ ok: false, status: 0, url: url.searchParams.get('u'), ms: 0, size: 0, text: '', error: e.name === 'AbortError' ? 'timeout' : e.cause?.code || e.message })); }
     return;
   }
-  let f = path.join(ROOT, decodeURIComponent(url.pathname)); if (!f.startsWith(ROOT)) { res.statusCode = 403; return res.end(); }
+  // The dashboard is the same single page as the home page (GitHub Pages gets a copy at dashboard/index.html, see deploy.yml).
+  const pth = /^\/dashboard\/?$/.test(url.pathname) ? '/index.html' : url.pathname;
+  let f = path.join(ROOT, decodeURIComponent(pth)); if (!f.startsWith(ROOT)) { res.statusCode = 403; return res.end(); }
   if (fs.existsSync(f) && fs.statSync(f).isDirectory()) f = path.join(f, 'index.html');
   if (!fs.existsSync(f)) { res.statusCode = 404; return res.end('Not found'); }
   res.setHeader('content-type', MIME[path.extname(f)] || 'application/octet-stream'); res.setHeader('cache-control', 'no-store');
