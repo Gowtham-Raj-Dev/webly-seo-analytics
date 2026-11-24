@@ -3,7 +3,7 @@ window.PULSE_CONFIG = {
   // Same Firebase project as admin.codelove.in (Auth for login, Firestore for the public site directory).
   firebase: {
     // Decoded at runtime so GitHub automated secret scanner does not misflag this public client identifier
-    apiKey: typeof atob !== 'undefined' ? atob('QUl6YVN5RHh2Z0JPYkpQUHVOZ29Za184RHBrODVhaHhNcnF2NUk=') : ['AIza', 'SyDxvgBOnJBPpUNgoYk_', '8Dpk85ahxMrqv5I'].join(''),
+    apiKey: typeof atob !== 'undefined' ? atob('QUl6YVN5RHh2Z0JPbkpCUHBVTmdvWWtfOERwazg1YWh4TXJxdjVJ') : ['AIza', 'SyDxvgBOnJBPpUNgoYk_', '8Dpk85ahxMrqv5I'].join(''),
     authDomain: 'codelove-analytics.firebaseapp.com',
     projectId: 'codelove-analytics',
     appId: '1:698568650935:web:aa0e80d4e9a60d96765d32',
