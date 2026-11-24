@@ -275,8 +275,8 @@ th.srt{cursor:pointer;user-select:none;white-space:nowrap}th.srt:hover{color:var
 .lp-nav{position:sticky;top:0;z-index:30;padding:12px 20px}
 .lp-navin{display:flex;align-items:center;gap:20px;max-width:1180px;margin:0 auto;padding:8px 8px 8px 16px;border-radius:14px;border:1px solid var(--line);background:color-mix(in srgb,var(--card) 78%,transparent);backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);box-shadow:0 10px 30px -20px rgba(20,22,60,.3)}
 .lp-nav nav{display:flex;gap:2px;margin:0 auto}
-.lp-nav nav button{padding:7px 13px;border-radius:8px;font-weight:500;font-size:13.5px;color:var(--tx2)}
-.lp-nav nav button:hover{color:var(--tx);background:var(--card2)}
+.lp-nav nav a,.lp-nav nav button{padding:7px 13px;border-radius:8px;font-weight:500;font-size:13.5px;color:var(--tx2)}
+.lp-nav nav a:hover,.lp-nav nav a.on,.lp-nav nav button:hover{color:var(--tx);background:var(--card2)}
 .lp-navr{display:flex;gap:8px;align-items:center}
 .lp-ic{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;color:var(--tx2);border:1px solid var(--line)}
 .lp-ic:hover{color:var(--tx);border-color:var(--tx3)}
@@ -409,7 +409,7 @@ th.srt{cursor:pointer;user-select:none;white-space:nowrap}th.srt:hover{color:var
 .lp-endin p{color:rgba(255,255,255,.75);font-size:16.5px;max-width:520px;margin:12px auto 30px}
 .lp-endin .gbtn{margin:0 auto}
 
-.lp-foot{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:36px 32px;max-width:1180px;margin:88px auto 0;padding:52px 24px 36px;border-top:1px solid var(--line);font-size:14px}
+.lp-foot{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:36px 32px;max-width:1180px;margin:88px auto 0;padding:52px 24px 36px;border-top:1px solid var(--line);font-size:14px}
 .lp-foot h4{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);margin-bottom:14px}
 .lp-foot>div>a:not(.brand),.lp-foot>div>button{display:block;width:fit-content;padding:4px 0;color:var(--tx2);font:inherit;font-weight:500;text-align:left;transition:color .12s}
 .lp-foot a:not(.brand):hover,.lp-foot>div>button:hover{color:var(--tx)}
@@ -530,3 +530,41 @@ body.busy:before{content:"";position:fixed;top:0;left:0;height:3px;z-index:200;b
 .si-back svg{transform:rotate(180deg)}.si-back:hover{color:var(--tx)}
 .side a.brand{color:inherit}
 @media(prefers-reduced-motion:reduce){body.busy:before,.sk:after{animation:none}}
+
+/* ---------- public sub pages (/tools/, /tools/<tool>/, /sites/) ---------- */
+.lp-tool{display:flex;flex-direction:column;color:inherit}
+.lp-go{display:inline-flex;align-items:center;gap:6px;margin-top:auto;padding-top:14px;font-size:13px;font-weight:600;color:var(--v1)}
+.dirmore{display:flex;justify-content:center;margin-top:22px}.dirmore .btn{height:40px;padding:0 18px;border-radius:10px}
+.pg-hero{position:relative;isolation:isolate;max-width:860px;margin:0 auto;padding:56px 24px 8px;text-align:center}
+.pg-hero h1{font-size:clamp(32px,5vw,54px);font-weight:800;letter-spacing:-.045em;line-height:1.06;margin:14px 0 14px;text-wrap:balance}
+.pg-hero>p{font-size:17px;color:var(--tx2);max-width:640px;margin:0 auto;text-wrap:balance}
+.pg-crumbs{display:flex;justify-content:center;gap:8px;font-size:13px;color:var(--tx3);margin-bottom:22px}.pg-crumbs a{color:var(--tx2)}.pg-crumbs a:hover{color:var(--v1)}.pg-crumbs b{color:var(--tx);font-weight:600}
+.pg-ic{display:inline-grid;place-items:center;width:58px;height:58px;border-radius:16px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 14px 30px -14px rgba(79,70,229,.6)}
+.pg-sec{padding-top:56px}
+.pg-th{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:15.5px;margin-bottom:5px}
+.pg-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.pg-card{padding:28px;border-radius:18px}.pg-card h2{font-size:20px;letter-spacing:-.02em;margin-bottom:18px}
+.pg-card .lp-list{gap:12px;font-size:14.5px}.pg-card .lp-list li{align-items:flex-start}.pg-card .lp-list svg{margin-top:3px}
+.pg-steps{list-style:none;display:flex;flex-direction:column;gap:18px}.pg-steps li{display:flex;gap:14px}.pg-steps .lp-n{margin:0;flex:none;width:34px;height:34px;font-size:14px;border-radius:10px}.pg-steps b{display:block}.pg-steps p{color:var(--tx2);font-size:14px}
+@media(max-width:800px){.pg-two{grid-template-columns:1fr}}
+
+/* ---------- first-time setup ---------- */
+.ob-card{max-width:620px;text-align:left;padding:30px}
+.ob-card .brand{justify-content:flex-start;padding:0 0 18px}
+.ob-bar{display:flex;align-items:center;gap:6px;margin-bottom:26px;flex-wrap:wrap}
+.ob-bar em{flex:1;min-width:10px;height:1px;background:var(--line)}
+.ob-st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--tx3);white-space:nowrap}
+.ob-st i{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;border:1px solid var(--line);font-style:normal;font-size:11px}
+.ob-st.on{color:var(--tx)}.ob-st.on i{background:var(--a1);border-color:var(--a1);color:#fff}
+.ob-st.done{color:var(--ok)}.ob-st.done i{background:var(--okbg);border-color:transparent;color:var(--ok)}
+.ob-card h2{font-size:24px;text-align:left}.ob-card>p{text-align:left;margin:6px 0 18px}
+.ob-form .ov-in{height:50px}.ob-form .ov-in .btn{height:40px}
+.ob-note{display:flex;align-items:center;gap:6px;color:var(--tx3)!important;font-size:12.5px;margin:12px 0 0!important}
+.ob-list{display:flex;flex-direction:column;gap:10px}
+.ob-row{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:14px;transition:border-color .15s}
+.ob-row>div{flex:1;min-width:0}.ob-row b{display:block}.ob-row small{color:var(--tx3);font-size:12.5px}
+.ob-row.cur{border-color:color-mix(in srgb,var(--c) 55%,var(--line));box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 12%,transparent)}
+.ob-row.ok{background:color-mix(in srgb,var(--ok) 5%,transparent)}
+.ob-link{color:var(--tx3);font-size:12.5px;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}.ob-link:hover{color:var(--tx)}
+.ob-go{width:100%;height:46px;border-radius:12px;margin-top:20px;font-size:15px}
+@media(max-width:560px){.ob-bar em,.ob-st:not(.on){display:none}.ob-row{flex-wrap:wrap}}

@@ -5,7 +5,7 @@ const BRAND = { name: 'Webly', host: 'webly.codelove.in' };
 /* ---------- state ---------- */
 const S = { theme: 'light', demo: false, conn: { ga: false, gsc: false, ads: false }, site: 'all', preset: '28', cStart: '', cEnd: '', compare: true, gam: 'users', gsm: 'clicks', gdev: '', kpi: 'users', off: {}, manual: [], info: {}, user: null };
 try { const o = JSON.parse(localStorage.getItem('pulse_state3') || '{}'); delete o.user; Object.assign(S, o); } catch (e) { /* ignore */ }
-S.info = S.info || {}; S.dirOff = S.dirOff || {}; Object.values(S.info).forEach((i) => { delete i.scanning; });
+S.info = S.info || {}; S.dirOff = S.dirOff || {}; S.obSkip = S.obSkip || {}; Object.values(S.info).forEach((i) => { delete i.scanning; });
 Object.defineProperty(S, 'range', { get: () => RANGE().n, set: () => {} });
 const save = () => { try { const { user, ...o } = S; localStorage.setItem('pulse_state3', JSON.stringify(o, (k, v) => (k === 'home' ? undefined : v))); } catch (e) { /* ignore */ } };
 document.documentElement.dataset.theme = S.theme;
@@ -88,7 +88,10 @@ function chartLabels(key) {
   return keys.slice(N).map((k) => (k.length > 10 ? k.slice(11) + ':00' : parseD(k).toLocaleDateString('en', { month: 'short', day: 'numeric' })));
 }
 /* ---------- sites ---------- */
-const DEMO = ['codelove.in', 'games.codelove.in', 'videomaker.codelove.in', 'apps.codelove.in', 'linkinbio.codelove.in'].map((d, i) => mk(d, ['CodeLove', 'Games', 'Video Maker', 'Apps Store', 'Link in Bio'][i]));
+// Sample sites for demo mode: made-up names, never the owner's real sites.
+const DEMO = ['sweetcrumbs.com', 'playzone.io', 'clipstudio.app', 'appshelf.dev', 'linkpage.me'].map((d, i) => mk(d, ['Sweet Crumbs', 'PlayZone', 'Clip Studio', 'AppShelf', 'LinkPage'][i]));
+/** The owner's own sites (codelove.in and its subdomains) are never listed publicly. */
+const OWN = (h) => /(^|\.)codelove\.in$/i.test(String(h || ''));
 function allSites() {
   const base = S.demo ? DEMO : (PX.R.loaded && real() ? PX.R.sites.map((s) => ({ ...mk(s.d), ga: s.ga, gsc: s.gsc, ads: s.ads, verified: true })) : []);
   const have = new Set(base.map((s) => s.d));
@@ -294,7 +297,7 @@ async function prefetch(r) {
     if (S.conn.ads && PX.has('ads')) X.adsx = await sf(PX.adsExtras());
   }
 }
-function demoKeywords(host) { const r = rnd(hash(host)); return ['free video maker', 'js game emulator', 'online video cutter', 'link in bio free', 'night heist game', 'java games online', 'video to gif', 'android apps store'].map((q, i) => ({ q, impr: Math.round(2000 * r() * (1 - i / 10) + 80), clicks: Math.round(120 * r() * (1 - i / 9)), pos: 3 + r() * 24, prev: 3 + r() * 24 })); }
+function demoKeywords(host) { const r = rnd(hash(host)); return ['chocolate cake recipe', 'free online games', 'online video editor', 'link in bio free', 'eggless cake near me', 'puzzle games online', 'video to gif', 'android app list'].map((q, i) => ({ q, impr: Math.round(2000 * r() * (1 - i / 10) + 80), clicks: Math.round(120 * r() * (1 - i / 9)), pos: 3 + r() * 24, prev: 3 + r() * 24 })); }
 const keywordsFor = async (host) => { if (S.demo) return demoKeywords(host); if (!S.conn.gsc) throw new Error('Connect Search Console to see Google keywords.'); if (!PX.has('gsc')) throw new Error('Reconnect Search Console first (Connections page).'); await ensureData(); return PX.keywords(host); };
 
 /* ---------- views ---------- */
@@ -349,7 +352,7 @@ V[''] = () => {
   })() : '';
 
   const todo = [];
-  if (S.demo) todo.push(['bolt', '#d97706', 'Sitemap missing on Link in Bio', 'Submit it in Search Console so Google can find your pages.'], ['dollar', '#16a34a', 'AdSense code missing on Apps Store', 'Earnings are being lost. Add the script and re-check.'], ['trend', '#4f46e5', '"free video maker" is #14', 'Move it to page 1 by adding it to the H1 and linking from 3 pages.']);
+  if (S.demo) todo.push(['bolt', '#d97706', 'Sitemap missing on LinkPage', 'Submit it in Search Console so Google can find your pages.'], ['dollar', '#16a34a', 'AdSense code missing on AppShelf', 'Earnings are being lost. Add the script and re-check.'], ['trend', '#4f46e5', '"online video editor" is #14', 'Move it to page 1 by adding it to the H1 and linking from 3 pages.']);
   else {
     if (ok.ga && ok.gsc) enabled().filter((s) => s.ga && !s.gsc).slice(0, 2).forEach((s) => todo.push(['search', '#4f46e5', `${s.d} is not in Search Console`, 'Add it in Search Console so you can see its Google keywords.']));
     if (ok.ga && u.delta < -20) todo.push(['trend', '#dc2626', `Visitors dropped ${Math.abs(u.delta).toFixed(0)}%`, 'Compare with the previous period in Analytics and check your top pages.']);
@@ -374,16 +377,19 @@ V.adsense = (tab) => SEC.adsense(tab);
 
 V.tools = () => TL.list.map((t) => `<a class="card tool c3" href="#/tools/${t.id}"><span class="tile">${I(t.i, 20)}</span><h3>${t.n}</h3><p>${t.d}</p><span class="go">Open ${I('arrow', 15)}</span></a>`).join('');
 
-function dirGrid() {
-  if (DIRERR) return `<p class="empty">The community list is not available right now.<br><small>${esc(DIRERR)}</small></p>`;
+/** Connected sites list. limit: how many to show (the home page shows 4 and links to /sites for the rest). */
+function dirGrid(limit) {
+  if (DIRERR) return `<p class="empty">The list is not available right now.<br><small>${esc(DIRERR)}</small></p>`;
   if (!DIRLIST) return '<p class="empty"><span class="spin"></span> Loading...</p>';
-  if (!DIRLIST.length) return '<p class="empty">No sites yet. Be the first: connect your Google account and switch on "Show on home page".</p>';
-  return `<div class="dirgrid">${DIRLIST.map((d) => `<a class="dircard" href="https://${esc(d.host)}" target="_blank" rel="noopener"><img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(d.host)}&sz=64" alt="" width="32" height="32" loading="lazy"><div><b>${esc(d.name)}</b><span>${esc(d.host)}</span><p>${esc(d.desc || '')}</p></div></a>`).join('')}</div>`;
+  const all = DIRLIST.filter((d) => !OWN(d.host)), list = limit ? all.slice(0, limit) : all;
+  if (!all.length) return '<p class="empty">No sites yet. Be the first: sign in, connect Google and your sites show up here.</p>';
+  return `<div class="dirgrid">${list.map((d) => `<a class="dircard" href="https://${esc(d.host)}" target="_blank" rel="noopener"><img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(d.host)}&sz=64" alt="" width="32" height="32" loading="lazy"><div><b>${esc(d.name)}</b><span>${esc(d.host)}</span><p>${esc(d.desc || '')}</p></div></a>`).join('')}</div>`
+    + (limit && all.length > limit ? `<div class="dirmore"><a class="btn o" href="/sites/" data-nav>View all ${all.length} connected sites ${I('arrow', 15)}</a></div>` : '');
 }
 async function loadDir(force) {
   if (DIRLIST && !force) return;
-  try { DIRLIST = await DIR.list(); DIRERR = ''; } catch (e) { DIRERR = e.code === 'permission-denied' ? 'The database rules for the directory are not published yet.' : e.message; DIRLIST = []; }
-  ['dirGrid', 'dirHome'].forEach((id) => { const g = document.getElementById(id); if (g) g.innerHTML = dirGrid(); });
+  try { DIRLIST = await DIR.list(200); DIRERR = ''; } catch (e) { DIRERR = e.code === 'permission-denied' ? 'The database rules for the directory are not published yet.' : e.message; DIRLIST = []; }
+  [['dirHome', 4], ['dirAll', 0]].forEach(([id, n]) => { const g = document.getElementById(id); if (g) g.innerHTML = dirGrid(n); });
 }
 async function loadMine() { try { MINE = new Set((await DIR.mine()).map((d) => d.host)); } catch (e) { /* rules not published yet */ } }
 /* Sites found in a user's Google accounts are listed on the public home page ("Connected sites") automatically.
@@ -391,8 +397,13 @@ async function loadMine() { try { MINE = new Set((await DIR.mine()).map((d) => d
 let autoListing = false;
 const autoTried = new Set();
 async function autoList() {
-  if (autoListing || !S.user || S.demo || !PX.R.loaded) return;
-  const want = () => allSites().filter((s) => s.verified && !s.manual && !MINE.has(s.d) && !S.dirOff[s.d] && !autoTried.has(s.d));
+  if (autoListing || !S.user || S.demo) return;
+  if (!autoList.cleaned) { // remove codelove.in sites that were listed before they were excluded
+    autoList.cleaned = true; await loadMine(); autoList.mine = true;
+    [...MINE].filter(OWN).forEach((h) => DIR.unpublish(h).then(() => { MINE.delete(h); DIRLIST = null; }).catch(() => { /* not allowed or already gone */ }));
+  }
+  if (!PX.R.loaded) return;
+  const want = () => allSites().filter((s) => s.verified && !s.manual && !OWN(s.d) && !MINE.has(s.d) && !S.dirOff[s.d] && !autoTried.has(s.d));
   if (!want().length) return;
   autoListing = true; let n = 0;
   try {
@@ -468,6 +479,86 @@ const reportMd = () => `# ${BRAND.name} report · ${new Date(LASTREP.at).toISOSt
 /* Every other CodeLove site, with the standard network labels (same list on every site's footer). */
 const NETWORK = [['CodeLove', 'https://codelove.in'], ['Free 3D Models', 'https://models.codelove.in'], ['Free 3D Games', 'https://games.codelove.in/'], ['Insta Downloader', 'https://downloader.codelove.in'], ['Link in Bio', 'https://linkinbio.codelove.in'], ['Video to GIF', 'https://videotogif.codelove.in'], ['Video to Images', 'https://videotoimages.codelove.in'], ['Free YouTube Automation', 'https://utubeflow.codelove.in'], ['Free Java Games', 'https://javaplay.codelove.in'], ['Video Cut', 'https://videocut.codelove.in'], ['Free AI Video Maker', 'https://videomaker.codelove.in'], ['Apps Store', 'https://apps.codelove.in']];
 const GLOGO = '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3A12 12 0 0 1 12 24a12 12 0 0 1 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 24 4a20 20 0 1 0 19.6 16.1z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8A12 12 0 0 1 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A12 12 0 0 1 12.7 28l-6.5 5A20 20 0 0 0 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.7-.4-3.9z"/></svg>';
+/* ---------- shared parts of the public pages ---------- */
+const LOGO = () => `<span class="logo">${I('pulse')}</span>`;
+/** Primary call to action: Google sign-in, or "Open your dashboard" when already signed in. next: where to go after sign-in. */
+const ctaBtn = (t, next) => signed() ? `<a class="gbtn" href="${next || '/dashboard'}" data-nav>${I('home', 17)} Open your dashboard</a>` : `<button class="gbtn" data-act="login"${next ? ` data-next="${next}"` : ''}>${GLOGO} ${t}</button>`;
+function lpNav() {
+  const me = signed(), here = location.pathname, on = (p) => (here === p ? ' class="on"' : '');
+  return `<header class="lp-nav"><div class="lp-navin"><a class="brand" href="/" data-nav style="padding:0">${LOGO()}${BRAND.name}</a><nav><a href="/#lpFeat" data-nav>Features</a><a href="/tools/" data-nav${on('/tools/')}>Tools</a><a href="/sites/" data-nav${on('/sites/')}>Connected sites</a><a href="/#lpHow" data-nav>How it works</a><a href="/#lpFaq" data-nav>FAQ</a></nav><div class="lp-navr"><button class="lp-ic" data-act="theme" aria-label="Switch theme">${I(S.theme === 'dark' ? 'sun' : 'moon', 17)}</button>${me ? `<a class="btn p" href="/dashboard" data-nav>Dashboard ${I('arrow', 15)}</a>` : '<button class="btn p" data-act="login">Sign in</button>'}</div></div></header>`;
+}
+const lpEnd = () => `<section class="lp-end"><div class="lp-endin"><h2>See your websites clearly</h2><p>Sign in with Google and get your first report in a minute. Free, read-only, no credit card.</p>${ctaBtn('Get started free')}</div></section>`;
+function lpFoot() {
+  const logo = LOGO();
+  return `<footer class="lp-foot"><div class="lp-fb"><a class="brand" href="/" data-nav style="padding:0">${logo}${BRAND.name}</a><p>Free website analytics dashboard, SEO audit and problem fixer for every site you own. Part of the CodeLove family of free tools.</p></div>
+    <div><h4>Product</h4><a href="/#lpFeat" data-nav>Features</a><a href="/tools/" data-nav>Free SEO tools</a><a href="/sites/" data-nav>Connected sites</a><a href="/#lpHow" data-nav>How it works</a><a href="/#lpFaq" data-nav>FAQ</a><a href="/dashboard" data-nav>Dashboard</a></div>
+    <div><h4>Popular tools</h4>${PAGES.TOOLS.slice(0, 5).map((t) => `<a href="${t.path}" data-nav>${t.name}</a>`).join('')}</div>
+    <div><h4>Company</h4><a href="https://codelove.in" target="_blank" rel="noopener">CodeLove Home</a><a href="https://gowtham.codelove.in" target="_blank" rel="noopener">About Gowtham</a><a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms</a></div>
+    <div class="lp-net"><h4>CodeLove network</h4><div>${NETWORK.map((n) => `<a href="${n[1]}" target="_blank" rel="noopener"><img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(n[1].replace(/^https:\/\/|\/$/g, ''))}&sz=32" alt="" width="16" height="16" loading="lazy" onerror="this.remove()">${n[0]}</a>`).join('')}</div></div>
+    <div class="lp-copy"><span>&copy; ${new Date().getFullYear()} ${BRAND.name} by CodeLove. All rights reserved.</span><span class="lp-credit">Built with <i>&hearts;</i> by <a href="https://gowtham.codelove.in" target="_blank" rel="noopener">Gowtham</a> &middot; <a href="https://codelove.in" target="_blank" rel="noopener">CodeLove</a> &middot; <a href="https://wa.me/916369494396" target="_blank" rel="noopener" aria-label="WhatsApp" class="lp-wa"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.2c0-.1-.2-.2-.4-.3z"/></svg></a> <a href="mailto:gowtham@codelove.in">gowtham@codelove.in</a></span></div>
+  </footer>`;
+}
+
+/* ---------- public pages: /tools/, /tools/<tool>/, /sites/ ---------- */
+const crumbs = (items) => `<nav class="pg-crumbs" aria-label="Breadcrumb"><a href="/" data-nav>Home</a>${items.map((c) => (c[1] ? `<span>/</span><a href="${c[1]}" data-nav>${c[0]}</a>` : `<span>/</span><b>${c[0]}</b>`)).join('')}</nav>`;
+function toolsPage() {
+  return `<div class="lp">${lpNav()}<section class="pg-hero"><div class="lp-bg" aria-hidden="true"></div>${crumbs([['Free SEO tools']])}<span class="lp-eye">Free SEO tools</span><h1>${PAGES.TOOLS.length} free SEO tools for your website</h1><p>Audit your site, find broken links, check page speed, track Google rankings and more. All free, all in one place.</p><div class="lp-cta">${ctaBtn('Start free with Google')}</div></section>
+    <section class="lp-sec pg-sec"><div class="lp-tools">${PAGES.TOOLS.map((t, i) => `<a class="lp-tool" href="${t.path}" data-nav><span class="tile">${I(t.icon, 20)}</span><h2 class="pg-th">${t.name}${i === 0 ? '<span class="lp-new">30+ checks</span>' : ''}</h2><p>${t.intro}</p><span class="lp-go">Open ${t.name} ${I('arrow', 14)}</span></a>`).join('')}</div></section>
+    ${lpEnd()}${lpFoot()}</div>`;
+}
+function toolPage(t) {
+  const next = `/dashboard#/tools/${t.id}`, others = PAGES.TOOLS.filter((x) => x.id !== t.id);
+  return `<div class="lp">${lpNav()}<section class="pg-hero"><div class="lp-bg" aria-hidden="true"></div>${crumbs([['Free SEO tools', '/tools/'], [t.name]])}<span class="pg-ic">${I(t.icon, 26)}</span><h1>${t.h1}</h1><p>${t.intro}</p><div class="lp-cta">${ctaBtn(`Use ${t.name} free`, next)}</div><div class="lp-trust"><span>${I('ok', 15)} Free</span><span>${I('ok', 15)} No credit card</span><span>${I('ok', 15)} Works for any website</span></div></section>
+    <section class="lp-sec pg-sec"><div class="pg-two"><div class="card pg-card"><h2>What ${t.name} checks</h2><ul class="lp-list">${t.points.map((p) => `<li>${I('ok', 16)}${p}</li>`).join('')}</ul></div><div class="card pg-card"><h2>How to use it</h2><ol class="pg-steps">${t.steps.map((s, i) => `<li><span class="lp-n">${i + 1}</span><div><b>${s[0]}</b><p>${s[1]}</p></div></li>`).join('')}</ol></div></div></section>
+    <section class="lp-sec pg-sec"><div class="lp-head"><h2>More free tools</h2></div><div class="lp-tools">${others.slice(0, 6).map((x) => `<a class="lp-tool" href="${x.path}" data-nav><span class="tile">${I(x.icon, 20)}</span><h3>${x.name}</h3><p>${x.intro}</p></a>`).join('')}</div><div class="dirmore"><a class="btn o" href="/tools/" data-nav>All ${PAGES.TOOLS.length} tools ${I('arrow', 15)}</a></div></section>
+    ${lpEnd()}${lpFoot()}</div>`;
+}
+function sitesPage() {
+  return `<div class="lp">${lpNav()}<section class="pg-hero"><div class="lp-bg" aria-hidden="true"></div>${crumbs([['Connected sites']])}<span class="lp-eye">Connected sites</span><h1>Websites connected to ${BRAND.name}</h1><p>Real websites whose owners use ${BRAND.name}. Sign in and connect Google, and your sites show up here too, for free.</p><div class="lp-cta">${ctaBtn('Add my website free')}</div></section>
+    <section class="lp-sec pg-sec"><div id="dirAll">${dirGrid(0)}</div></section>${lpEnd()}${lpFoot()}</div>`;
+}
+/** Which public page is this path? Returns html, or '' when it is not a public page. */
+function publicPage() {
+  const p = location.pathname.replace(/\/?$/, '/');
+  if (p === '/') return loginPage();
+  if (p === '/tools/') return toolsPage();
+  if (p === '/sites/') return sitesPage();
+  const m = p.match(/^\/tools\/([a-z0-9-]+)\/$/), t = m && PAGES.bySlug(m[1]);
+  return t ? toolPage(t) : '';
+}
+/** Title, description and canonical for the current public page (the static copies made at deploy already have them). */
+function setMeta() {
+  const p = location.pathname.replace(/\/?$/, '/'), r = PAGES.route(p) || PAGES.route('/'), set = (sel, attr, v) => { const el = document.querySelector(sel); if (el) el.setAttribute(attr, v); };
+  document.title = r.title; set('meta[name="description"]', 'content', r.desc); set('link[rel="canonical"]', 'href', `https://${BRAND.host}${r.path}`);
+  set('meta[property="og:url"]', 'content', `https://${BRAND.host}${r.path}`); set('meta[property="og:title"]', 'content', r.title); set('meta[property="og:description"]', 'content', r.desc);
+}
+
+/* ---------- account switch + first-time setup ---------- */
+/** Saved state belongs to one account. When a different account signs in on this browser, wipe the previous
+    account's connections, Google tokens and sites so nothing of theirs can show. */
+function adoptUser(u) {
+  if (!u || !u.uid || S.demo) return;
+  if (!S.owner) { S.owner = u.uid; if (connCount() || S.manual.length) S.onboarded = true; save(); return; } // first run after this update: keep the current owner's setup
+  if (S.owner === u.uid) return;
+  ['ga', 'gsc', 'ads'].forEach((k) => PX.forget(k));
+  Object.assign(S, { owner: u.uid, conn: { ga: false, gsc: false, ads: false }, site: 'all', manual: [], info: {}, off: {}, dirOff: {}, onboarded: false, obSkip: {}, obSite: '' });
+  PX.R.loaded = false; PX.R.sites = []; loadKey = ''; MINE = new Set(); render.mine = false; autoTried.clear(); autoList.mine = false; save();
+}
+const OB_SRC = [['ga', 'Google Analytics', 'Visitors, pages, sources and live users', '#d97706', 'chart'], ['gsc', 'Search Console', 'Google keywords, positions and indexing', '#4f46e5', 'search'], ['ads', 'AdSense', 'Earnings and site approval', '#16a34a', 'dollar']];
+/** First-time setup: 1) your website, 2-4) connect Analytics, Search Console, AdSense, then the dashboard. */
+function startPage() {
+  const site = S.obSite, nm = S.user ? esc(S.user.name.split(' ')[0]) : '';
+  const left = OB_SRC.filter((s) => !S.conn[s[0]] && !S.obSkip[s[0]]), next = left[0] && left[0][0], ready = site && !left.length;
+  const stepNo = !site ? 1 : ready ? 5 : 2 + OB_SRC.findIndex((s) => s[0] === next);
+  const bar = ['Your website', 'Analytics', 'Search Console', 'AdSense', 'Dashboard'].map((l, i) => `<span class="ob-st ${i + 1 < stepNo ? 'done' : i + 1 === stepNo ? 'on' : ''}"><i>${i + 1 < stepNo ? I('ok', 12) : i + 1}</i>${l}</span>`).join('<em></em>');
+  const body = !site
+    ? `<h2>Welcome${nm ? ', ' + nm : ''}! What is your website?</h2><p>Enter the website you want to track. You can add more sites later.</p><form class="ob-form" onsubmit="event.preventDefault();this.querySelector('button').click()"><div class="ov-in">${I('globe', 16)}<input id="obSite" placeholder="example.com" autocomplete="off" autofocus aria-label="Your website"><button class="btn p" type="button" data-act="obsite">Continue ${I('arrow', 15)}</button></div></form><p class="ob-note">${I('eye', 14)} Read-only. We never change anything on your site or your Google accounts.</p>`
+    : `<h2>Connect your Google accounts</h2><p>Sign in with the Google account that manages <b>${esc(site)}</b> <button class="ob-link" data-act="obchange">change</button>. Each one is read-only and takes one click.</p>
+      <div class="ob-list">${OB_SRC.map((s) => { const on = S.conn[s[0]], sk = S.obSkip[s[0]] && !on; return `<div class="ob-row ${on ? 'ok' : s[0] === next ? 'cur' : ''}" style="--c:${s[3]}"><span class="ov-ic">${I(s[4], 18)}</span><div><b>${s[1]}</b><small>${s[2]}</small></div>${on ? `<span class="tag ok">${I('ok', 13)} Connected</span>` : `${sk ? '<span class="tag mute">Skipped</span>' : `<button class="ob-link" data-act="obskip" data-k="${s[0]}">I don't use it</button>`}<button class="btn ${s[0] === next ? 'p' : 'o'} sm" data-act="connect" data-k="${s[0]}">${I('plug', 14)} Connect</button>`}</div>`; }).join('')}</div>
+      <button class="btn p ob-go" data-act="obdone" ${ready ? '' : 'disabled'}>Open my dashboard ${I('arrow', 16)}</button>${ready ? '' : `<p class="ob-note">Connect ${left.map((s) => s[1]).join(', ')}, or choose "I don't use it", to continue.</p>`}`;
+  return `<div class="si ob"><div class="card si-card ob-card"><a class="brand" href="/" data-nav>${LOGO()}${BRAND.name}</a><div class="ob-bar">${bar}</div>${body}</div></div>`;
+}
+
 function signInPage() {
   return `<div class="si"><div class="card si-card"><a class="brand" href="/" data-nav><span class="logo">${I('pulse')}</span>${BRAND.name}</a><h2>Sign in to your dashboard</h2><p>Use your Google account. It takes a few seconds and there is no credit card.</p><button class="gbtn" data-act="login">${GLOGO} Continue with Google</button><a class="si-back" href="/" data-nav>${I('arrow', 14)} Back to the home page</a></div></div>`;
 }
@@ -490,7 +581,7 @@ function loginPage() {
   ];
   const ck = (t) => `<li>${I('ok', 16)}${t}</li>`;
   return `<div class="lp">
-  <header class="lp-nav"><div class="lp-navin"><a class="brand" href="/" data-nav style="padding:0">${logo}${BRAND.name}</a><nav><button data-scroll="lpFeat">Features</button><button data-scroll="lpSites">Connected sites</button><button data-scroll="lpTools">Tools</button><button data-scroll="lpHow">How it works</button><button data-scroll="lpFaq">FAQ</button></nav><div class="lp-navr"><button class="lp-ic" data-act="theme" aria-label="Switch theme">${I(S.theme === 'dark' ? 'sun' : 'moon', 17)}</button>${me ? `<a class="btn p" href="/dashboard" data-nav>Dashboard ${I('arrow', 15)}</a>` : '<button class="btn p" data-act="login">Sign in</button>'}</div></div></header>
+  ${lpNav()}
 
   <section class="lp-hero"><div class="lp-bg" aria-hidden="true"></div>
     <div class="lp-hin"><span class="lp-pill"><i></i>Free website analytics &amp; SEO audit tool · ${nT} tools inside</span>
@@ -525,10 +616,10 @@ function loginPage() {
     </div>
   </section>
 
-  <section class="lp-sec" id="lpSites"><div class="lp-head"><span class="lp-eye">Connected sites</span><h2>Websites connected to ${BRAND.name}</h2><p>Real sites whose owners use ${BRAND.name}. Connect your Google account and your sites show up here too, for free.</p></div><div id="dirHome">${dirGrid()}</div></section>
+  <section class="lp-sec" id="lpSites"><div class="lp-head"><span class="lp-eye">Connected sites</span><h2>Websites connected to ${BRAND.name}</h2><p>Real sites whose owners use ${BRAND.name}. Connect your Google account and your sites show up here too, for free.</p></div><div id="dirHome">${dirGrid(4)}</div></section>
 
   <section class="lp-sec" id="lpTools"><div class="lp-head"><span class="lp-eye">Tools</span><h2>${nT} tools that check your sites for you</h2><p>Type any domain and get answers in seconds. Connecting Google is optional for these.</p></div>
-    <div class="lp-tools">${TL.list.map((t, i) => `<div class="lp-tool"><span class="tile">${I(t.i, 20)}</span><h3>${t.n}${i === 0 ? '<span class="lp-new">30+ checks</span>' : ''}</h3><p>${t.d}</p></div>`).join('')}</div>
+    <div class="lp-tools">${PAGES.TOOLS.map((t, i) => `<a class="lp-tool" href="${t.path}" data-nav><span class="tile">${I(t.icon, 20)}</span><h3>${t.name}${i === 0 ? '<span class="lp-new">30+ checks</span>' : ''}</h3><p>${(TL.list.find((x) => x.id === t.id) || {}).d || t.intro}</p><span class="lp-go">Learn more ${I('arrow', 14)}</span></a>`).join('')}</div>
   </section>
 
   <section class="lp-sec" id="lpHow"><div class="lp-head"><span class="lp-eye">How it works</span><h2>Ready in under a minute</h2><p>No code to add to your site. No setup calls.</p></div>
@@ -539,14 +630,9 @@ function loginPage() {
     <div class="lp-faq">${faqs.map((f, i) => `<details${i ? '' : ' open'}><summary>${f[0]}${I('chev', 18)}</summary><p>${f[1]}</p></details>`).join('')}</div>
   </section>
 
-  <section class="lp-end"><div class="lp-endin"><h2>See your websites clearly</h2><p>Sign in with Google and get your first report in a minute. Free, read-only, no credit card.</p>${gbtn('Get started free')}</div></section>
+  ${lpEnd()}
 
-  <footer class="lp-foot"><div class="lp-fb"><a class="brand" href="/" data-nav style="padding:0">${logo}${BRAND.name}</a><p>Free website analytics dashboard, SEO audit and problem fixer for every site you own. Part of the CodeLove family of free tools.</p></div>
-    <div><h4>Product</h4><button data-scroll="lpFeat">Features</button><button data-scroll="lpSites">Connected sites</button><button data-scroll="lpTools">Tools</button><button data-scroll="lpHow">How it works</button><button data-scroll="lpFaq">FAQ</button></div>
-    <div><h4>Company</h4><a href="https://codelove.in" target="_blank" rel="noopener">CodeLove Home</a><a href="https://gowtham.codelove.in" target="_blank" rel="noopener">About Gowtham</a><a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms</a></div>
-    <div class="lp-net"><h4>CodeLove network</h4><div>${NETWORK.map((n) => `<a href="${n[1]}" target="_blank" rel="noopener"><img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(n[1].replace(/^https:\/\/|\/$/g, ''))}&sz=32" alt="" width="16" height="16" loading="lazy" onerror="this.remove()">${n[0]}</a>`).join('')}</div></div>
-    <div class="lp-copy"><span>&copy; ${new Date().getFullYear()} ${BRAND.name} by CodeLove. All rights reserved.</span><span class="lp-credit">Built with <i>&hearts;</i> by <a href="https://gowtham.codelove.in" target="_blank" rel="noopener">Gowtham</a> &middot; <a href="https://codelove.in" target="_blank" rel="noopener">CodeLove</a> &middot; <a href="https://wa.me/916369494396" target="_blank" rel="noopener" aria-label="WhatsApp" class="lp-wa"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.2c0-.1-.2-.2-.4-.3z"/></svg></a> <a href="mailto:gowtham@codelove.in">gowtham@codelove.in</a></span></div>
-  </footer></div>`;
+  ${lpFoot()}</div>`;
 }
 
 /* ---------- render / events ---------- */
@@ -558,8 +644,18 @@ async function render() {
   if (rb) rb.content = ISDASH() ? 'noindex, nofollow' : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1';
   if (typeof cleanup === 'function') { cleanup(); cleanup = null; }
   if (ov && ov.classList.contains('open') && !render.keep) ov.classList.remove('open');
-  if (!ISDASH()) { document.body.classList.remove('busy'); app.innerHTML = loginPage(); loadDir(); return; }
+  if (!ISDASH()) {
+    document.body.classList.remove('busy');
+    const html = publicPage();
+    if (!html) { history.replaceState(null, '', '/'); return render(); } // unknown path: home page
+    app.innerHTML = html; setMeta(); loadDir();
+    const id = location.hash.slice(1), el = id && document.getElementById(id);
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 40);
+    return;
+  }
+  document.title = (TITLES[route()] || TITLES[''])[0] + ' · ' + BRAND.name;
   if (!signed()) { document.body.classList.remove('busy'); app.innerHTML = signInPage(); return; }
+  if (S.user && !S.demo && !S.onboarded) { document.body.classList.remove('busy'); document.title = 'Set up · ' + BRAND.name; app.innerHTML = startPage(); return; }
   const r = route(), key = (V[r] ? r : ''), tid = key === 'tools' ? toolId() : '', tab = key === 'tools' ? '' : toolId();
   const seq = render.seq = (render.seq || 0) + 1, y = window.scrollY, ks = render.keepScroll; render.keepScroll = false;
   const what = 'Loading ' + (TITLES[key] || TITLES[''])[0] + '...';
@@ -597,7 +693,7 @@ document.addEventListener('click', async (e) => {
   if ((el = q('[data-addsub]'))) { const h = el.dataset.addsub; if (!S.manual.includes(h)) S.manual.push(h); subInfo(h); save(); rerender(); return; }
   if (!(el = q('[data-act]'))) return;
   const a = el.dataset.act;
-  if (a === 'login') { try { toast('Opening Google...'); await DIR.signIn(); goPath('/dashboard'); } catch (er) { toast(er.code === 'auth/popup-closed-by-user' ? 'Sign-in cancelled' : er.message); } }
+  if (a === 'login') { try { toast('Opening Google...'); await DIR.signIn(); goPath(el.dataset.next || '/dashboard'); } catch (er) { toast(er.code === 'auth/popup-closed-by-user' ? 'Sign-in cancelled' : er.message); } }
   else if (a === 'logout') { try { await DIR.signOut(); } catch (er) { /* ignore */ } S.demo = false; S.user = null; S.conn = { ga: false, gsc: false, ads: false }; ['ga', 'gsc', 'ads'].forEach((k) => PX.forget(k)); loadKey = ''; PX.R.loaded = false; MINE = new Set(); render.mine = false; save(); goPath('/'); }
   else if (a === 'theme') { S.theme = S.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = S.theme; save(); rerender(); }
   else if (a === 'connect') { const k = el.dataset.k; try { await PX.connect(k); S.demo = false; S.conn[k] = true; loadKey = ''; PX.clear(); save(); toast(`${NAMES[k]} connected`); rerender(); } catch (er) { toast(er.message); } }
@@ -609,6 +705,15 @@ document.addEventListener('click', async (e) => {
   else if (a === 'findsubs') scanSubs(el.dataset.h);
   else if (a === 'addsubs') { const h = el.dataset.h, have = new Set(allSites().map((s) => s.d)); (S.info[h].subs || []).filter((s) => !have.has(s.h)).forEach((s) => { S.manual.push(s.h); subInfo(s.h); }); save(); rerender(); toast('Subdomains added'); }
   else if (a === 'applyrange') { const s = document.getElementById('cS').value, e2 = document.getElementById('cE').value; if (!s || !e2 || s > e2) return toast('Pick a start date before the end date'); S.preset = 'custom'; S.cStart = s; S.cEnd = e2; save(); rerender(); }
+  else if (a === 'obsite') {
+    const h = cleanHost((document.getElementById('obSite') || {}).value);
+    if (!validHostName(h)) return toast('Enter a website like example.com');
+    S.obSite = h; if (!allSites().some((s) => s.d === h)) S.manual.push(h); save(); rerender();
+    inspectSite(h).then((i) => { delete i.home; if (i.ok) { S.info[h] = i; save(); } }).catch(() => { /* site check is optional here */ });
+  }
+  else if (a === 'obskip') { S.obSkip[el.dataset.k] = true; save(); rerender(); }
+  else if (a === 'obchange') { S.obSite = ''; save(); rerender(); }
+  else if (a === 'obdone') { S.onboarded = true; save(); history.replaceState(null, '', '/dashboard'); render(); toast('Your dashboard is ready'); }
   else if (a === 'genreport') genReport();
   else if (a === 'copyai') { navigator.clipboard.writeText(reportMd()).then(() => toast('Copied, paste it into any AI')); }
   else if (a === 'dlmd') { const b = new Blob([reportMd()], { type: 'text/markdown' }), l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = 'report.md'; l.click(); }
@@ -620,13 +725,13 @@ setInterval(() => { const n = document.getElementById('liveN'); if (n && S.demo)
 
 window.UI = { I, fav, esc, fmt, toast, sites: enabled, keywords: keywordsFor, addSite: addSiteFlow, rerender: () => rerender() };
 // Remember who was signed in, so a refresh shows the dashboard at once (Firebase confirms a moment later).
-try { const c = JSON.parse(localStorage.getItem('webly_user') || 'null'); if (c && c.uid) S.user = c; } catch (e) { /* ignore */ }
+try { const c = JSON.parse(localStorage.getItem('webly_user') || 'null'); if (c && c.uid) { S.user = c; adoptUser(c); } } catch (e) { /* ignore */ }
 (async () => {
   if (signed() || !ISDASH()) render(); else document.getElementById('app').innerHTML = '<div style="min-height:100vh;display:grid;place-items:center"><span class="spin" style="width:22px;height:22px"></span></div>';
   let first = true;
   try {
     await DIR.onUser((u) => {
-      const had = !!S.user; S.user = u;
+      const had = !!S.user; S.user = u; adoptUser(u);
       try { if (u) localStorage.setItem('webly_user', JSON.stringify(u)); else localStorage.removeItem('webly_user'); } catch (e) { /* ignore */ }
       if (u && (!had || first)) { render.mine = false; loadMine(); }
       if (first || had !== !!u || !u) render();
