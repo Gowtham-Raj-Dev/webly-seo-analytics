@@ -416,16 +416,79 @@ const reportMd = () => `# ${BRAND.name} report · ${new Date(LASTREP.at).toISOSt
 /* ---------- login / home (public) ---------- */
 function loginPage() {
   const G = '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3A12 12 0 0 1 12 24a12 12 0 0 1 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 24 4a20 20 0 1 0 19.6 16.1z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8A12 12 0 0 1 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A12 12 0 0 1 12.7 28l-6.5 5A20 20 0 0 0 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.7-.4-3.9z"/></svg>';
-  const feats = [['chart', 'Google Analytics', 'Visitors, pages, sources, countries, devices and live users. Today, yesterday or any date range, with comparison.'], ['search', 'Search Console', 'Queries, pages, positions, sitemaps and index status. See what ranks and what Google has not indexed.'], ['dollar', 'AdSense', 'Earnings, RPM, per-site and per-country numbers, approval status and payments for every site.'], ['file', 'AI-ready reports', 'One click report with problems first and simple fix steps. Copy it for any AI or download it.'], ['globe', 'Free promotion', 'Optional: list your site on the Webly home page so more people can find it. Switch it off any time.'], ['plug', 'Read-only and private', 'Your Google data is read in your browser and never stored by us. Disconnect whenever you like.']];
-  const steps = [['1', 'Sign in with Google', 'Takes a few seconds. No credit card.'], ['2', 'Connect what you use', 'Analytics, Search Console, AdSense. One click each, read-only.'], ['3', 'Get answers', 'See your numbers, run the tools, and read the report that tells you what to fix.']];
-  return `<div class="lp"><header class="lp-nav"><div class="brand" style="padding:0"><span class="logo">${I('pulse')}</span>${BRAND.name}</div><nav><button data-scroll="lpFeat">What we do</button><button data-scroll="lpTools">Tools</button><button data-scroll="lpHow">How it works</button><button data-scroll="lpSites">Sites</button></nav><button class="btn p" data-act="login">Sign in with Google</button></header>
-  <section class="lp-hero"><div><span class="lp-pill">Free for every website owner</span><h1>All your website data, <span class="grad">in one place.</span></h1><p>${BRAND.name} connects Google Analytics, Search Console and AdSense, runs 8 website checks for you, and writes a report that tells you exactly what to fix.</p><div class="lp-cta"><button class="gbtn" data-act="login">${G} Continue with Google</button><button class="btn o" data-scroll="lpFeat" style="height:42px;padding:0 18px">See what it does</button></div><div class="lp-trust"><span>${I('ok', 15)} Read-only access</span><span>${I('ok', 15)} Disconnect any time</span><span>${I('ok', 15)} No credit card</span></div></div>
-  <div class="lp-mock card"><div class="lp-bar"><i></i><i></i><i></i></div><div class="lp-kpis"><div><small>Visitors</small><b>45.3K</b><span class="dl up">&#9650; 23.3%</span></div><div><small>Google clicks</small><b>16.2K</b><span class="dl up">&#9650; 22.3%</span></div><div><small>Earnings</small><b>$253.92</b><span class="dl up">&#9650; 19.6%</span></div></div><svg viewBox="0 0 400 120" preserveAspectRatio="none" style="width:100%;height:120px"><defs><linearGradient id="lpg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4f46e5" stop-opacity=".25"/><stop offset="1" stop-color="#4f46e5" stop-opacity="0"/></linearGradient></defs><path d="M0,90 C40,70 60,95 100,60 C140,25 170,70 210,50 C250,30 280,60 320,25 C350,8 380,30 400,18 L400,120 L0,120Z" fill="url(#lpg)"/><path d="M0,90 C40,70 60,95 100,60 C140,25 170,70 210,50 C250,30 280,60 320,25 C350,8 380,30 400,18" fill="none" stroke="#4f46e5" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg><div class="lp-rows"><div><span class="tag ok">Broken links</span> 0 found on 65 pages</div><div><span class="tag warn">Search Console</span> 2 pages not indexed</div><div><span class="tag ok">Uptime</span> 5 of 5 sites online</div></div></div></section>
-  <section class="lp-sec" id="lpFeat"><h2>What ${BRAND.name} does for you</h2><p class="lp-sub">Everything about your websites, without opening five different tabs.</p><div class="lp-grid">${feats.map((f) => `<div class="card lp-feat"><span class="tile">${I(f[0], 20)}</span><h3>${f[1]}</h3><p>${f[2]}</p></div>`).join('')}</div></section>
-  <section class="lp-sec" id="lpTools"><h2>8 tools that check your sites for you</h2><p class="lp-sub">Type any domain. No Google account needed for these.</p><div class="lp-grid lp-tools">${TL.list.map((t) => `<div class="card lp-feat"><span class="tile">${I(t.i, 20)}</span><h3>${t.n}</h3><p>${t.d}</p></div>`).join('')}</div></section>
-  <section class="lp-sec" id="lpHow"><h2>How it works</h2><div class="lp-steps">${steps.map((s) => `<div class="card"><span class="lp-n">${s[0]}</span><h3>${s[1]}</h3><p>${s[2]}</p></div>`).join('')}</div><div style="text-align:center;margin-top:28px"><button class="gbtn" style="max-width:280px;margin:auto" data-act="login">${G} Get started free</button></div></section>
-  <section class="lp-sec" id="lpSites"><h2>Sites on ${BRAND.name}</h2><p class="lp-sub">Owners chose to be shown here, for free promotion. Connect your site and switch on "Show on home page" to join.</p><div id="dirHome">${dirGrid()}</div></section>
-  <footer class="lp-foot"><div class="brand" style="padding:0"><span class="logo">${I('pulse')}</span>${BRAND.name}</div><span><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms</a></span><span class="sub">${BRAND.name} by CodeLove</span></footer></div>`;
+  const gbtn = (t) => `<button class="gbtn" data-act="login">${G} ${t}</button>`;
+  const nT = TL.list.length, logo = `<span class="logo">${I('pulse')}</span>`;
+  const kp = [['Visitors', '45.3K', '23.3%'], ['Google clicks', '16.2K', '22.3%'], ['Avg. position', '8.4', '1.2'], ['Earnings', '$253.92', '19.6%']];
+  const pages = [['/blog/seo-guide', '12.4K', 100], ['/tools', '8.1K', 65], ['/', '6.3K', 51], ['/blog/speed-tips', '3.9K', 31], ['/about', '1.7K', 14]];
+  const bars = [38, 52, 44, 61, 48, 70, 58, 66, 74, 63, 82, 95];
+  const qs = [['free seo checker', 3, 2], ['site audit tool', 5, 4], ['broken link finder', 8, 1]];
+  const steps = [['Sign in with Google', 'Takes a few seconds. No credit card, nothing to install.'], ['Connect what you use', 'Analytics, Search Console, AdSense. One click each, read-only.'], ['Get answers', 'See your numbers, run the tools, and read the report that tells you what to fix.']];
+  const faqs = [
+    [`Is ${BRAND.name} free?`, `Yes. Signing in, connecting your Google accounts, the ${nT} tools and the reports are all free. No credit card needed.`],
+    ['Do you store my Google data?', 'No. Your Analytics, Search Console and AdSense numbers are read in your own browser and shown to you. We do not save them on any server.'],
+    ['What access does it ask for?', 'Read-only access only. We can see your numbers, but we can never change settings, delete anything or touch your earnings. Disconnect any time.'],
+    ['Can I use the tools without Google Analytics?', 'Yes. Sign in, then type any domain into a tool. Connecting Google is optional and only needed for your traffic, search and earnings numbers.'],
+    ['How many websites can I add?', 'All the sites in your connected Google accounts show up on their own, and you can add any other domain by hand.']
+  ];
+  const ck = (t) => `<li>${I('ok', 16)}${t}</li>`;
+  return `<div class="lp">
+  <header class="lp-nav"><div class="lp-navin"><a class="brand" href="#/" style="padding:0">${logo}${BRAND.name}</a><nav><button data-scroll="lpFeat">Features</button><button data-scroll="lpTools">Tools</button><button data-scroll="lpHow">How it works</button><button data-scroll="lpFaq">FAQ</button><button data-scroll="lpSites">Sites</button></nav><div class="lp-navr"><button class="lp-ic" data-act="theme" aria-label="Switch theme">${I(S.theme === 'dark' ? 'sun' : 'moon', 17)}</button><button class="btn p" data-act="login">Sign in</button></div></div></header>
+
+  <section class="lp-hero"><div class="lp-bg" aria-hidden="true"></div>
+    <div class="lp-hin"><span class="lp-pill"><i></i>Free for every website owner · ${nT} tools inside</span>
+      <h1>Know everything about<br><span class="grad">your websites.</span></h1>
+      <p>${BRAND.name} puts Google Analytics, Search Console and AdSense on one screen, checks your sites for problems, and tells you exactly how to fix them.</p>
+      <div class="lp-cta">${gbtn('Continue with Google')}<button class="btn o lp-btn2" data-scroll="lpFeat">Explore features ${I('arrow', 16)}</button></div>
+      <div class="lp-trust"><span>${I('ok', 15)} Read-only access</span><span>${I('ok', 15)} Disconnect any time</span><span>${I('ok', 15)} No credit card</span></div>
+    </div>
+    <div class="lp-shot"><div class="lp-ring"><div class="lp-win"><div class="lp-wbar"><i></i><i></i><i></i><span>${BRAND.host}</span></div>
+      <div class="lp-app"><aside>${logo}${['home', 'chart', 'search', 'dollar', 'tools', 'file'].map((n, i) => `<i class="${i ? '' : 'on'}">${I(n, 17)}</i>`).join('')}</aside>
+        <main><div class="lp-mh"><div><b>Overview</b><small>All sites · 5 websites</small></div><span class="lp-chip">${I('cal', 13)} Last 28 days</span></div>
+          <div class="lp-k">${kp.map((k) => `<div><small>${k[0]}</small><b>${k[1]}</b><span class="lp-up">&#9650; ${k[2]}</span></div>`).join('')}</div>
+          <div class="lp-mg"><div class="lp-mc"><div class="lp-mt">Visitors <span>vs previous 28 days</span></div><svg viewBox="0 0 400 140" preserveAspectRatio="none"><defs><linearGradient id="lpg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6366f1" stop-opacity=".28"/><stop offset="1" stop-color="#6366f1" stop-opacity="0"/></linearGradient></defs><path d="M0,112 C40,104 70,118 110,96 C150,74 180,100 220,86 C260,72 290,92 330,70 C360,54 385,66 400,58" fill="none" stroke="var(--tx3)" stroke-width="1.6" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" opacity=".6"/><path d="M0,100 C40,80 60,104 100,70 C140,36 170,78 210,58 C250,38 280,66 320,32 C350,14 380,34 400,20 L400,140 L0,140Z" fill="url(#lpg)"/><path d="M0,100 C40,80 60,104 100,70 C140,36 170,78 210,58 C250,38 280,66 320,32 C350,14 380,34 400,20" fill="none" stroke="#6366f1" stroke-width="2.4" vector-effect="non-scaling-stroke"/></svg></div>
+            <div class="lp-mc"><div class="lp-mt">Top pages <span>Visitors</span></div><div class="lp-pg">${pages.map((p) => `<div><span>${p[0]}</span><b>${p[1]}</b><em><i style="width:${p[2]}%"></i></em></div>`).join('')}</div></div></div>
+        </main></div></div></div>
+      <div class="lp-float f1"><span class="lp-dot"></span><div><b>All 5 sites online</b><small>Checked 2 minutes ago</small></div></div>
+      <div class="lp-float f2"><span class="tile">${I('spark', 16)}</span><div><b>Report ready</b><small>3 problems, each with a fix</small></div></div>
+    </div>
+  </section>
+
+  <section class="lp-strip"><span>Works with</span><b>${I('chart')} Google Analytics</b><b>${I('search')} Search Console</b><b>${I('dollar')} AdSense</b><b>${I('bolt')} PageSpeed</b></section>
+  <section class="lp-stats"><div><b>30+</b><span>checks in one site audit</span></div><div><b>${nT}</b><span>free website tools</span></div><div><b>3</b><span>Google products, one screen</span></div><div><b>0</b><span>data stored on our servers</span></div></section>
+
+  <section class="lp-sec" id="lpFeat"><div class="lp-head"><span class="lp-eye">Features</span><h2>One dashboard instead of five tabs</h2><p>Everything Google knows about your sites, explained in plain words.</p></div>
+    <div class="lp-bento">
+      <div class="card lp-b s4" style="--c:#d97706"><span class="tile">${I('chart', 20)}</span><h3>Google Analytics</h3><p>Visitors, pages, sources, countries, devices and live users. Today, yesterday or any date range, compared with the period before.</p><div class="lp-vis"><div class="lp-bars">${bars.map((h, i) => `<i class="${i === bars.length - 1 ? 'on' : ''}" style="height:${h}%"></i>`).join('')}</div></div></div>
+      <div class="card lp-b s2" style="--c:#4f46e5"><span class="tile">${I('search', 20)}</span><h3>Search Console</h3><p>What people search to find you, and where you rank.</p><div class="lp-vis lp-q">${qs.map((q) => `<div><span>${q[0]}</span><b>#${q[1]}</b><em>&#9650; ${q[2]}</em></div>`).join('')}</div></div>
+      <div class="card lp-b s2" style="--c:#16a34a"><span class="tile">${I('dollar', 20)}</span><h3>AdSense</h3><p>Earnings, RPM and approval status for every site.</p><div class="lp-vis"><div class="lp-money">$253.92</div><div class="sub">This month · <span class="lp-up">&#9650; 19.6%</span></div><svg class="lp-spark" viewBox="0 0 200 40" preserveAspectRatio="none"><path d="M0,34 L20,30 L40,32 L60,24 L80,26 L100,18 L120,22 L140,12 L160,15 L180,6 L200,8" fill="none" stroke="#16a34a" stroke-width="2" vector-effect="non-scaling-stroke"/></svg></div></div>
+      <div class="card lp-b s4" style="--c:#7c3aed"><span class="tile">${I('file', 20)}</span><h3>Reports that tell you what to fix</h3><p>One click checks every site. Problems come first, each with simple steps. Copy it for any AI or download it.</p><div class="lp-vis"><div class="lp-rep"><div class="lp-rh"><b>Report · 5 sites</b><span><i>${I('copy', 13)} Copy for AI</i><i class="p">${I('down', 13)} Download</i></span></div><div><span class="tag bad">Urgent</span>Missing meta description on 4 pages</div><div><span class="tag warn">Improve</span>12 images have no alt text</div><div><span class="tag ok">All good</span>HTTPS, sitemap.xml and robots.txt</div></div></div></div>
+      <div class="card lp-b s3" style="--c:#0891b2"><span class="tile">${I('eye', 20)}</span><h3>Read-only and private</h3><p>Your Google data is read in your browser and never stored by us.</p><ul class="lp-vis lp-list">${ck('Cannot change any setting')}${ck('Nothing saved on our servers')}${ck('Disconnect with one click')}</ul></div>
+      <div class="card lp-b s3" style="--c:#db2777"><span class="tile">${I('globe', 20)}</span><h3>Free promotion</h3><p>Optional: list your site on the ${BRAND.name} home page so more people find it.</p><div class="lp-vis"><div class="lp-tg"><span class="lp-fav">${I('globe', 16)}</span><div><b>yoursite.com</b><small>Shown on the ${BRAND.name} home page</small></div><span class="lp-sw"></span></div></div></div>
+    </div>
+  </section>
+
+  <section class="lp-sec" id="lpTools"><div class="lp-head"><span class="lp-eye">Tools</span><h2>${nT} tools that check your sites for you</h2><p>Type any domain and get answers in seconds. Connecting Google is optional for these.</p></div>
+    <div class="lp-tools">${TL.list.map((t, i) => `<div class="lp-tool"><span class="tile">${I(t.i, 20)}</span><h3>${t.n}${i === 0 ? '<span class="lp-new">30+ checks</span>' : ''}</h3><p>${t.d}</p></div>`).join('')}</div>
+  </section>
+
+  <section class="lp-sec" id="lpHow"><div class="lp-head"><span class="lp-eye">How it works</span><h2>Ready in under a minute</h2><p>No code to add to your site. No setup calls.</p></div>
+    <div class="lp-steps">${steps.map((s, i) => `<div class="card lp-step"><span class="lp-n">${i + 1}</span><h3>${s[0]}</h3><p>${s[1]}</p></div>`).join('')}</div>
+  </section>
+
+  <section class="lp-sec" id="lpSites"><div class="lp-head"><span class="lp-eye">Community</span><h2>Sites on ${BRAND.name}</h2><p>Owners chose to be shown here for free promotion. Connect your site and switch on "Show on home page" to join.</p></div><div id="dirHome">${dirGrid()}</div></section>
+
+  <section class="lp-sec" id="lpFaq"><div class="lp-head"><span class="lp-eye">FAQ</span><h2>Questions, answered</h2></div>
+    <div class="lp-faq">${faqs.map((f, i) => `<details${i ? '' : ' open'}><summary>${f[0]}${I('chev', 18)}</summary><p>${f[1]}</p></details>`).join('')}</div>
+  </section>
+
+  <section class="lp-end"><div class="lp-endin"><h2>See your websites clearly</h2><p>Sign in with Google and get your first report in a minute. Free, read-only, no credit card.</p>${gbtn('Get started free')}</div></section>
+
+  <footer class="lp-foot"><div><a class="brand" href="#/" style="padding:0">${logo}${BRAND.name}</a><p>Website analytics, SEO audit and problem fixer for every site you own.</p></div>
+    <div><h4>Product</h4><button data-scroll="lpFeat">Features</button><button data-scroll="lpTools">Tools</button><button data-scroll="lpHow">How it works</button><button data-scroll="lpFaq">FAQ</button></div>
+    <div><h4>Legal</h4><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms</a></div>
+    <div><h4>CodeLove</h4><a href="https://codelove.in" target="_blank" rel="noopener">codelove.in</a><a href="https://apps.codelove.in" target="_blank" rel="noopener">More apps</a></div>
+    <div class="lp-copy"><span>&copy; ${new Date().getFullYear()} ${BRAND.name} by CodeLove</span><span>Made for website owners</span></div>
+  </footer></div>`;
 }
 
 /* ---------- render / events ---------- */
