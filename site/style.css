@@ -1,6 +1,6 @@
 :root{
   --a1:#4f46e5;--a2:#4f46e5;--grad:#4f46e5;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;
-  --r:12px;--font:'Poppins',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  --r:12px;--font:'Bricolage Grotesque',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
 }
 [data-theme=light]{
   --bg:#f6f7f9;--side:#ffffff;--card:#ffffff;--card2:#f3f4f7;--line:#e6e8ee;--tx:#14161f;--tx2:#5c6273;--tx3:#8b91a1;
@@ -598,3 +598,7 @@ body.busy:before{content:"";position:fixed;top:0;left:0;height:3px;z-index:200;b
 .wa-mk{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}.wa-mk div{border:1px solid var(--line);border-radius:11px;padding:10px 12px}.wa-mk small{display:block;color:var(--tx3);font-size:11.5px}.wa-mk b{font-size:18px;letter-spacing:-.02em}
 .wa-mcode{margin:0;padding:16px 18px;border-radius:14px}
 @media(max-width:900px){.wa-lp{grid-template-columns:1fr;gap:28px}}
+
+/* Bricolage Grotesque is already narrow at display sizes: give big headings a little more room */
+.lp-hero h1,.pg-hero h1{letter-spacing:-.025em}
+.lp-head h2,.wa-lpt h2,.lp-endin h2,.ov-hl h2,.si-card h2,.lp-stats b,.ov-k .v,.lp-money,.wa-mh b{letter-spacing:-.015em}
