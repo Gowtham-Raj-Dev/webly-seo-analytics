@@ -23,7 +23,10 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Dashboard page (/dashboard serves the same single page app)
-        run: mkdir -p site/dashboard && cp site/index.html site/dashboard/index.html
+        run: |
+          mkdir -p site/dashboard
+          sed 's|<meta name="robots" content="[^"]*">|<meta name="robots" content="noindex, nofollow">|' site/index.html > site/dashboard/index.html
+          grep -q 'noindex, nofollow' site/dashboard/index.html
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -39,3 +42,8 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Ping IndexNow
+        continue-on-error: true
+        run: |
+          curl -s -o /dev/null -w "IndexNow: %{http_code}\n" -X POST "https://api.indexnow.org/indexnow" -H "Content-Type: application/json; charset=utf-8" \
+            -d '{"host":"webly.codelove.in","key":"2c7c5ee4ac3ac04bee95a85d3a1eb7e2","keyLocation":"https://webly.codelove.in/2c7c5ee4ac3ac04bee95a85d3a1eb7e2.txt","urlList":["https://webly.codelove.in/","https://webly.codelove.in/privacy.html","https://webly.codelove.in/terms.html"]}'

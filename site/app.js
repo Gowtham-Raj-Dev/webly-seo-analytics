@@ -465,6 +465,8 @@ function showReport(r) {
 const reportMd = () => `# ${BRAND.name} report · ${new Date(LASTREP.at).toISOString().slice(0, 10)}\n\n` + LASTREP.data.map((d) => `## ${d.host}\n` + (d.ps.length ? d.ps.map((p) => `- **[${p.sev === 'bad' ? 'URGENT' : 'IMPROVE'}] ${p.t}**\n` + p.w.map((x, i) => `  ${i + 1}. ${x}`).join('\n')).join('\n') : '- No problems found')).join('\n\n') + '\n';
 
 /* ---------- login / home (public) ---------- */
+/* Every other CodeLove site, with the standard network labels (same list on every site's footer). */
+const NETWORK = [['CodeLove', 'https://codelove.in'], ['Free 3D Models', 'https://models.codelove.in'], ['Free 3D Games', 'https://games.codelove.in/'], ['Insta Downloader', 'https://downloader.codelove.in'], ['Link in Bio', 'https://linkinbio.codelove.in'], ['Video to GIF', 'https://videotogif.codelove.in'], ['Video to Images', 'https://videotoimages.codelove.in'], ['Free YouTube Automation', 'https://utubeflow.codelove.in'], ['Free Java Games', 'https://javaplay.codelove.in'], ['Video Cut', 'https://videocut.codelove.in'], ['Free AI Video Maker', 'https://videomaker.codelove.in'], ['Apps Store', 'https://apps.codelove.in']];
 const GLOGO = '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3A12 12 0 0 1 12 24a12 12 0 0 1 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 24 4a20 20 0 1 0 19.6 16.1z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8A12 12 0 0 1 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7A20 20 0 0 0 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2A12 12 0 0 1 12.7 28l-6.5 5A20 20 0 0 0 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3a12 12 0 0 1-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.7-.4-3.9z"/></svg>';
 function signInPage() {
   return `<div class="si"><div class="card si-card"><a class="brand" href="/" data-nav><span class="logo">${I('pulse')}</span>${BRAND.name}</a><h2>Sign in to your dashboard</h2><p>Use your Google account. It takes a few seconds and there is no credit card.</p><button class="gbtn" data-act="login">${GLOGO} Continue with Google</button><a class="si-back" href="/" data-nav>${I('arrow', 14)} Back to the home page</a></div></div>`;
@@ -479,6 +481,7 @@ function loginPage() {
   const qs = [['free seo checker', 3, 2], ['site audit tool', 5, 4], ['broken link finder', 8, 1]];
   const steps = [['Sign in with Google', 'Takes a few seconds. No credit card, nothing to install.'], ['Connect what you use', 'Analytics, Search Console, AdSense. One click each, read-only.'], ['Get answers', 'See your numbers, run the tools, and read the report that tells you what to fix.']];
   const faqs = [
+    [`What is ${BRAND.name}?`, `${BRAND.name} is a free website analytics dashboard and SEO audit tool. It shows Google Analytics, Search Console and AdSense for all your websites on one screen, runs a 30+ point site audit, finds broken links, checks page speed and tracks keyword rankings.`],
     [`Is ${BRAND.name} free?`, `Yes. Signing in, connecting your Google accounts, the ${nT} tools and the reports are all free. No credit card needed.`],
     ['Do you store my Google data?', 'No. Your Analytics, Search Console and AdSense numbers are read in your own browser and shown to you. We do not save them on any server.'],
     ['What access does it ask for?', 'Read-only access only. We can see your numbers, but we can never change settings, delete anything or touch your earnings. Disconnect any time.'],
@@ -490,7 +493,7 @@ function loginPage() {
   <header class="lp-nav"><div class="lp-navin"><a class="brand" href="/" data-nav style="padding:0">${logo}${BRAND.name}</a><nav><button data-scroll="lpFeat">Features</button><button data-scroll="lpSites">Connected sites</button><button data-scroll="lpTools">Tools</button><button data-scroll="lpHow">How it works</button><button data-scroll="lpFaq">FAQ</button></nav><div class="lp-navr"><button class="lp-ic" data-act="theme" aria-label="Switch theme">${I(S.theme === 'dark' ? 'sun' : 'moon', 17)}</button>${me ? `<a class="btn p" href="/dashboard" data-nav>Dashboard ${I('arrow', 15)}</a>` : '<button class="btn p" data-act="login">Sign in</button>'}</div></div></header>
 
   <section class="lp-hero"><div class="lp-bg" aria-hidden="true"></div>
-    <div class="lp-hin"><span class="lp-pill"><i></i>Free for every website owner · ${nT} tools inside</span>
+    <div class="lp-hin"><span class="lp-pill"><i></i>Free website analytics &amp; SEO audit tool · ${nT} tools inside</span>
       <h1>Know everything about<br><span class="grad">your websites.</span></h1>
       <p>${BRAND.name} puts Google Analytics, Search Console and AdSense on one screen, checks your sites for problems, and tells you exactly how to fix them.</p>
       <div class="lp-cta">${gbtn('Continue with Google')}<button class="btn o lp-btn2" data-scroll="lpFeat">Explore features ${I('arrow', 16)}</button></div>
@@ -538,11 +541,11 @@ function loginPage() {
 
   <section class="lp-end"><div class="lp-endin"><h2>See your websites clearly</h2><p>Sign in with Google and get your first report in a minute. Free, read-only, no credit card.</p>${gbtn('Get started free')}</div></section>
 
-  <footer class="lp-foot"><div><a class="brand" href="/" data-nav style="padding:0">${logo}${BRAND.name}</a><p>Website analytics, SEO audit and problem fixer for every site you own.</p></div>
-    <div><h4>Product</h4><button data-scroll="lpFeat">Features</button><button data-scroll="lpTools">Tools</button><button data-scroll="lpHow">How it works</button><button data-scroll="lpFaq">FAQ</button></div>
-    <div><h4>Legal</h4><a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms</a></div>
-    <div><h4>CodeLove</h4><a href="https://codelove.in" target="_blank" rel="noopener">codelove.in</a><a href="https://apps.codelove.in" target="_blank" rel="noopener">More apps</a></div>
-    <div class="lp-copy"><span>&copy; ${new Date().getFullYear()} ${BRAND.name} by CodeLove</span><span>Made for website owners</span></div>
+  <footer class="lp-foot"><div class="lp-fb"><a class="brand" href="/" data-nav style="padding:0">${logo}${BRAND.name}</a><p>Free website analytics dashboard, SEO audit and problem fixer for every site you own. Part of the CodeLove family of free tools.</p></div>
+    <div><h4>Product</h4><button data-scroll="lpFeat">Features</button><button data-scroll="lpSites">Connected sites</button><button data-scroll="lpTools">Tools</button><button data-scroll="lpHow">How it works</button><button data-scroll="lpFaq">FAQ</button></div>
+    <div><h4>Company</h4><a href="https://codelove.in" target="_blank" rel="noopener">CodeLove Home</a><a href="https://gowtham.codelove.in" target="_blank" rel="noopener">About Gowtham</a><a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms</a></div>
+    <div class="lp-net"><h4>CodeLove network</h4><div>${NETWORK.map((n) => `<a href="${n[1]}" target="_blank" rel="noopener"><img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(n[1].replace(/^https:\/\/|\/$/g, ''))}&sz=32" alt="" width="16" height="16" loading="lazy" onerror="this.remove()">${n[0]}</a>`).join('')}</div></div>
+    <div class="lp-copy"><span>&copy; ${new Date().getFullYear()} ${BRAND.name} by CodeLove. All rights reserved.</span><span class="lp-credit">Built with <i>&hearts;</i> by <a href="https://gowtham.codelove.in" target="_blank" rel="noopener">Gowtham</a> &middot; <a href="https://codelove.in" target="_blank" rel="noopener">CodeLove</a> &middot; <a href="https://wa.me/916369494396" target="_blank" rel="noopener" aria-label="WhatsApp" class="lp-wa"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.1.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.2c0-.1-.2-.2-.4-.3z"/></svg></a> <a href="mailto:gowtham@codelove.in">gowtham@codelove.in</a></span></div>
   </footer></div>`;
 }
 

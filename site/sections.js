@@ -12,6 +12,8 @@
   const kpi = (l, v, c, p, ic, lower) => `<div class="card kpi c3" style="grid-column:span 3"><div class="kh"><span class="tile">${I(ic, 16)}</span>${S.compare ? chg(c, p, lower) : ''}</div><div class="v">${v}</div><div class="l">${l}</div></div>`;
   const note = (t) => `<div class="card c12 sub" style="padding:12px 20px">${t}</div>`;
   const errCard = (e) => `<div class="card c12" style="border-color:var(--bad)"><span class="tag bad">Problem</span> ${esc(e.message || e)}${e.enable ? ` <span class="sub">(Webly admin: enable ${e.enable.join(', ')} in the Google Cloud project.)</span>` : ''}</div>`;
+  /** Connected, but the one-hour Google token ran out: show a reconnect card instead of zeros. */
+  const expired = (k, t) => `<div class="card c12 empty"><div style="width:48px;height:48px;border-radius:12px;background:var(--warnbg);display:grid;place-items:center;margin:0 auto 12px;color:var(--warn)">${I('refresh', 24)}</div><h3 style="font-size:17px">Reconnect ${t}</h3><p style="margin:6px 0 16px">Google access lasts one hour, so these numbers are hidden until you reconnect.</p><button class="btn p" data-act="connect" data-k="${k}">Reconnect ${t}</button></div>`;
   const loadingMsg = '<div class="card c12 empty"><span class="spin"></span> Loading...</div>';
 
   /* ---------- tabs ---------- */
@@ -83,7 +85,7 @@
   /* ---------- ANALYTICS ---------- */
   const GA_TABS = [['overview', 'Overview'], ['pages', 'Pages'], ['sources', 'Sources'], ['locations', 'Locations'], ['devices', 'Devices'], ['events', 'Events'], ['live', 'Live']];
   async function analytics(tab) {
-    if (!S.demo && !S.conn.ga) return none('ga', 'Google Analytics');
+    if (!S.demo && !S.conn.ga) return none('ga', 'Google Analytics'); if (!S.demo && !PX.has('ga')) return expired('ga', 'Google Analytics');
     tab = GA_TABS.some((t) => t[0] === tab) ? tab : 'overview';
     const bar = tabs('analytics', GA_TABS, tab);
     try {
@@ -154,7 +156,7 @@
   const gscCols = (first) => [...first, { l: 'Clicks', n: 1, v: (r) => r.clicks, h: (r) => nf(r.clicks) }, { l: 'Impressions', n: 1, v: (r) => r.impr, h: (r) => nf(r.impr) }, { l: 'CTR', n: 1, v: (r) => r.ctr, h: (r) => pctf(r.ctr) }, { l: 'Position', n: 1, v: (r) => r.pos, h: (r) => `<span class="tag ${r.pos <= 10 ? 'ok' : r.pos <= 20 ? 'warn' : 'mute'}">${r.pos.toFixed(1)}</span>`, c: (r) => r.pos.toFixed(1) }, ...(S.compare ? [{ l: 'Clicks change', n: 1, v: (r) => (r.p && r.p.clicks ? (r.clicks - r.p.clicks) / r.p.clicks : 0), h: (r) => chg(r.clicks, r.p && r.p.clicks) }, { l: 'Position change', n: 1, v: (r) => (r.p && r.p.pos ? r.p.pos - r.pos : 0), h: (r) => (r.p && r.p.pos ? `<span class="dl ${r.p.pos - r.pos >= 0 ? 'up' : 'dn'}">${r.p.pos - r.pos >= 0 ? '&#9650;' : '&#9660;'} ${Math.abs(r.p.pos - r.pos).toFixed(1)}</span>` : '<span class="sub">new</span>'), c: (r) => (r.p && r.p.pos ? (r.p.pos - r.pos).toFixed(1) : '') }] : [])];
   const devChips = () => `<span class="seg">${[['', 'All devices'], ['MOBILE', 'Mobile'], ['DESKTOP', 'Desktop'], ['TABLET', 'Tablet']].map(([k, l]) => `<button data-gdev="${k}" class="${(S.gdev || '') === k ? 'on' : ''}">${l}</button>`).join('')}</span>`;
   async function search(tab) {
-    if (!S.demo && !S.conn.gsc) return none('gsc', 'Search Console');
+    if (!S.demo && !S.conn.gsc) return none('gsc', 'Search Console'); if (!S.demo && !PX.has('gsc')) return expired('gsc', 'Search Console');
     tab = GSC_TABS.some((t) => t[0] === tab) ? tab : 'overview';
     const bar = tabs('search', GSC_TABS, tab);
     let pre = ''; if (!S.demo && !gscHosts().length) return bar + `<div class="card c12 empty"><h3>No Search Console sites</h3><p style="margin:6px 0">None of the selected sites is a Search Console property of this Google account.</p></div>`;
@@ -237,7 +239,7 @@
   const adsCols = (first) => [...first, { l: 'Earnings', n: 1, v: (r) => r.e, h: (r) => money(r.e), c: (r) => r.e.toFixed(2) }, { l: 'Page views', n: 1, v: (r) => r.pv, h: (r) => nf(r.pv) }, { l: 'Impressions', n: 1, v: (r) => r.imp, h: (r) => nf(r.imp) }, { l: 'Clicks', n: 1, v: (r) => r.clk, h: (r) => nf(r.clk) }, { l: 'CTR', n: 1, v: actr, h: (r) => pctf(actr(r)) }, { l: 'Page RPM', n: 1, v: rpm, h: (r) => money(rpm(r)), c: (r) => rpm(r).toFixed(2) }, { l: 'CPC', n: 1, v: cpc, h: (r) => money(cpc(r)), c: (r) => cpc(r).toFixed(3) }, ...(S.compare ? [{ l: 'Earnings change', n: 1, v: (r) => (r.p && r.p.e ? (r.e - r.p.e) / r.p.e : 0), h: (r) => chg(r.e, r.p && r.p.e) }] : [])];
   const adsFetch = async (dims, demoNames, scale) => (real() ? PX.adsCompare(dims, RANGE(), S.compare) : demoAds(demoNames, scale, dims.join()));
   async function adsense(tab) {
-    if (!S.demo && !S.conn.ads) return none('ads', 'AdSense');
+    if (!S.demo && !S.conn.ads) return none('ads', 'AdSense'); if (!S.demo && !PX.has('ads')) return expired('ads', 'AdSense');
     tab = ADS_TABS.some((t) => t[0] === tab) ? tab : 'overview';
     const bar = tabs('adsense', ADS_TABS, tab);
     try { return bar + await ({ overview: adsOverview, sites: adsSites, countries: adsCountries, platforms: adsPlatforms, units: adsUnits, payments: adsPayments, approval: adsApproval }[tab])(); } catch (e) { return bar + errCard(e); }
