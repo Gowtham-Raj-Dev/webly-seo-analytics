@@ -197,7 +197,12 @@
 
     // Scripts & CSS render-blocking
     const scripts = qAll('script[src]');
-    d.blockingScripts = scripts.filter((s) => !s.hasAttribute('defer') && !s.hasAttribute('async') && s.getAttribute('type') !== 'module').length;
+    const badScripts = scripts.filter((s) => !s.hasAttribute('defer') && !s.hasAttribute('async') && s.getAttribute('type') !== 'module' && !s.hasAttribute('nomodule'));
+    d.blockingScripts = badScripts.length;
+    d.sampleBlocking = badScripts.slice(0, 2).map((s) => {
+      const src = s.getAttribute('src') || '';
+      return `<script defer src="${src}"></script>`;
+    }).join('\n');
     d.preconnects = qAll('link[rel="preconnect" i]').length;
 
     // Security & Mixed content
@@ -386,8 +391,8 @@
 
     // 15. Render-Blocking Scripts
     if (d.blockingScripts > 0) {
-      add('warn', 'speed', 'Render-blocking scripts', `${d.blockingScripts} script(s) without defer/async`, 'Synchronous scripts delay page rendering. Add defer or async.',
-        '<script defer src="/assets/main.js"></script>',
+      add('warn', 'speed', 'Render-blocking scripts', `${d.blockingScripts} script(s) without defer/async`, 'Synchronous scripts delay page rendering. Add defer or async to these script tags.',
+        d.sampleBlocking || '<script defer src="..."></script>',
         `Fix render-blocking scripts on ${res.url}`);
     } else {
       add('ok', 'speed', 'Render-blocking scripts', 'None (asynchronous/deferred)');
