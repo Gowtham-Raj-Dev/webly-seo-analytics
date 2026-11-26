@@ -5,7 +5,7 @@ const BRAND = { name: 'Webly', host: 'webly.codelove.in' };
 /* ---------- state ---------- */
 const S = { theme: 'light', demo: false, conn: { ga: false, gsc: false, ads: false }, site: 'all', preset: '28', cStart: '', cEnd: '', compare: true, gam: 'users', gsm: 'clicks', gdev: '', kpi: 'users', off: {}, manual: [], info: {}, user: null };
 try { const o = JSON.parse(localStorage.getItem('pulse_state3') || '{}'); delete o.user; Object.assign(S, o); } catch (e) { /* ignore */ }
-S.info = S.info || {}; S.dirOff = S.dirOff || {}; S.obSkip = S.obSkip || {}; Object.values(S.info).forEach((i) => { delete i.scanning; });
+S.info = S.info || {}; S.dirOff = S.dirOff || {}; S.hidden = S.hidden || {}; S.obSkip = S.obSkip || {}; Object.values(S.info).forEach((i) => { delete i.scanning; });
 Object.defineProperty(S, 'range', { get: () => RANGE().n, set: () => {} });
 const save = () => { try { const { user, ...o } = S; localStorage.setItem('pulse_state3', JSON.stringify(o, (k, v) => (k === 'home' ? undefined : v))); } catch (e) { /* ignore */ } };
 document.documentElement.dataset.theme = S.theme;
@@ -92,10 +92,11 @@ function chartLabels(key) {
 const DEMO = ['sweetcrumbs.com', 'playzone.io', 'clipstudio.app', 'appshelf.dev', 'linkpage.me'].map((d, i) => mk(d, ['Sweet Crumbs', 'PlayZone', 'Clip Studio', 'AppShelf', 'LinkPage'][i]));
 /** The owner's own sites (codelove.in and its subdomains) are never listed publicly. */
 const OWN = (h) => /(^|\.)codelove\.in$/i.test(String(h || ''));
+const JUNK = (h) => /(zrubix\.com|sop3a\.com|\.hosted\.app|\.web\.app|\.firebaseapp\.com|localhost)$/i.test(String(h || ''));
 function allSites() {
   const base = S.demo ? DEMO : (PX.R.loaded && real() ? PX.R.sites.map((s) => ({ ...mk(s.d), ga: s.ga, gsc: s.gsc, ads: s.ads, verified: true })) : []);
   const have = new Set(base.map((s) => s.d));
-  return [...base, ...S.manual.filter((d) => !have.has(d)).map((d) => ({ ...mk(d), manual: true }))];
+  return [...base, ...S.manual.filter((d) => !have.has(d)).map((d) => ({ ...mk(d), manual: true }))].filter((s) => !JUNK(s.d) && !(S.hidden && S.hidden[s.d]));
 }
 const enabled = () => allSites().filter((s) => !S.off[s.d]);
 const activeSites = () => enabled().filter((s) => S.site === 'all' || S.site === s.d);
@@ -464,8 +465,17 @@ V.tools = () => TL.list.map((t) => `<a class="card tool c3" href="#/tools/${t.id
 function dirGrid(limit) {
   if (DIRERR) return `<p class="empty">The list is not available right now.<br><small>${esc(DIRERR)}</small></p>`;
   if (!DIRLIST) return '<p class="empty"><span class="spin"></span> Loading...</p>';
-  const all = DIRLIST.filter((d) => !OWN(d.host)), list = limit ? all.slice(0, limit) : all;
-  if (!all.length) return '<p class="empty">No sites yet. Be the first: sign in, connect Google and your sites show up here.</p>';
+  const isJunk = (h, name) => {
+    const host = String(h || '').toLowerCase().trim();
+    const n = String(name || '').toLowerCase().trim();
+    if (['zrubix.com', 'sop3a.com'].includes(host)) return true;
+    if (/(hosted\.app|web\.app|firebaseapp\.com|workers\.dev|localhost)/i.test(host)) return true;
+    if (/^(not found|site not found|404|error)/i.test(n)) return true;
+    if (S.dirOff && S.dirOff[host]) return true;
+    return false;
+  };
+  const all = DIRLIST.filter((d) => !isJunk(d.host, d.name)), list = limit ? all.slice(0, limit) : all;
+  if (!all.length) return '<p class="empty">No connected sites yet. Connect your site in the dashboard to list it here.</p>';
   return `<div class="dirgrid">${list.map((d) => `<a class="dircard" href="https://${esc(d.host)}" target="_blank" rel="noopener"><img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(d.host)}&sz=64" alt="" width="32" height="32" loading="lazy"><div><b>${esc(d.name)}</b><span>${esc(d.host)}</span><p>${esc(d.desc || '')}</p></div></a>`).join('')}</div>`
     + (limit && all.length > limit ? `<div class="dirmore"><a class="btn o" href="/sites/" data-nav>View all ${all.length} connected sites ${I('arrow', 15)}</a></div>` : '');
 }
@@ -475,28 +485,19 @@ async function loadDir(force) {
   [['dirHome', 4], ['dirAll', 0]].forEach(([id, n]) => { const g = document.getElementById(id); if (g) g.innerHTML = dirGrid(n); });
 }
 async function loadMine() { try { MINE = new Set((await DIR.mine()).map((d) => d.host)); } catch (e) { /* rules not published yet */ } }
-/* Sites found in a user's Google accounts are listed on the public home page ("Connected sites") automatically.
-   Sites typed in by hand are not (ownership not proven). Switching a site off in Connections is remembered in S.dirOff. */
-let autoListing = false;
-const autoTried = new Set();
+/* Sites promotion: only sites explicitly chosen by the user are published.
+   Junk / unhosted domains and turned-off sites are automatically pruned and not republished. */
+const JUNK_HOST = (h) => /(zrubix\.com|sop3a\.com|\.hosted\.app|\.web\.app|\.firebaseapp\.com|localhost)$/i.test(String(h || ''));
 async function autoList() {
-  if (autoListing || !S.user || S.demo) return;
-  if (!autoList.cleaned) { // remove codelove.in sites that were listed before they were excluded
-    autoList.cleaned = true; await loadMine(); autoList.mine = true;
-    [...MINE].filter(OWN).forEach((h) => DIR.unpublish(h).then(() => { MINE.delete(h); DIRLIST = null; }).catch(() => { /* not allowed or already gone */ }));
-  }
-  if (!PX.R.loaded) return;
-  const want = () => allSites().filter((s) => s.verified && !s.manual && !OWN(s.d) && !MINE.has(s.d) && !S.dirOff[s.d] && !autoTried.has(s.d));
-  if (!want().length) return;
-  autoListing = true; let n = 0;
+  if (!S.user || S.demo) return;
   try {
-    if (!autoList.mine) { await loadMine(); autoList.mine = true; }
-    for (const s of want()) {
-      autoTried.add(s.d); const i = S.info[s.d] || {};
-      try { await DIR.publish(s.d, (i.title || mk(s.d).n).slice(0, 60), (i.desc || '').slice(0, 160)); MINE.add(s.d); n++; } catch (e) { /* listed by another account, or rules not published */ }
+    await loadMine();
+    for (const h of [...MINE]) {
+      if (JUNK_HOST(h) || (S.dirOff && S.dirOff[h])) {
+        try { await DIR.unpublish(h); MINE.delete(h); DIRLIST = null; } catch (e) { /* ignore */ }
+      }
     }
-  } finally { autoListing = false; }
-  if (n) { DIRLIST = null; toast(`${n} site${n === 1 ? ' is' : 's are'} now shown on the ${BRAND.name} home page. Change it in Connections.`); if (route() === 'connect') rerender(); }
+  } catch (e) { /* ignore */ }
 }
 
 V.connect = () => {
@@ -504,7 +505,7 @@ V.connect = () => {
   const n = connCount(), sites = allSites();
   return `<div class="card c12"><div class="steps"><span class="step ${signed() ? 'ok' : 'on'}"><i>${signed() ? I('ok', 13) : 1}</i>Sign in</span><hr><span class="step ${n || S.demo ? 'ok' : 'on'}"><i>${n || S.demo ? I('ok', 13) : 2}</i>Connect Google</span><hr><span class="step ${sites.length ? 'ok' : ''}"><i>${sites.length ? I('ok', 13) : 3}</i>Pick sites</span><hr><span class="step"><i>4</i>First report</span></div></div>`
     + cards.map((c) => `<div class="card conn c4 ${S.conn[c[0]] ? 'done' : ''}"><span class="logo2" style="background:${c[3]}">${I(c[4], 22)}</span><div><h3>${c[1]}</h3><div class="sub">${c[2]}</div></div><ul>${c[5].map((x) => `<li>${x}</li>`).join('')}</ul>${S.conn[c[0]] ? `<div style="display:flex;gap:8px;align-items:center"><span class="tag ok" style="flex:1;justify-content:center;padding:8px">${I('ok', 14)} Connected${PX.has(c[0]) ? '' : ' (expired)'}</span>${PX.has(c[0]) ? '' : `<button class="btn p sm" data-act="connect" data-k="${c[0]}">Reconnect</button>`}<button class="btn o sm" data-act="disconnect" data-k="${c[0]}">Disconnect</button></div>` : `<button class="btn p" data-act="connect" data-k="${c[0]}">${I('plug', 16)} Connect with Google</button>`}</div>`).join('')
-    + `<div class="card c12"><div class="ch"><div><h3>Your sites</h3><div class="sub">Sites found in your Google accounts are shown on the ${BRAND.name} home page under "Connected sites" (name, short description and a link) for free promotion. Switch off any site you do not want listed.</div></div></div>${sites.length ? `<div class="list">${sites.map((s) => { const pub = MINE.has(s.d), can = (s.verified || S.demo) && !s.manual; return `<div class="li" style="flex-wrap:wrap">${fav(s)}<div class="t"><b>${esc(s.d)}</b><span>${[s.ga && 'Analytics', s.gsc && 'Search Console', s.ads && 'AdSense', s.manual && 'added by hand'].filter(Boolean).join(' · ') || 'Demo site'}</span></div><label class="sw" title="Show this site in the dashboard"><input type="checkbox" data-sitetoggle="${esc(s.d)}" ${S.off[s.d] ? '' : 'checked'}><i></i><span>In dashboard</span></label><label class="sw ${can ? '' : 'dis'}" title="${can ? 'Free promotion on the home page' : 'Only sites found in your Google account can be promoted'}"><input type="checkbox" data-pub="${esc(s.d)}" ${pub ? 'checked' : ''} ${can ? '' : 'disabled'}><i></i><span>Show on home page</span></label>${s.manual ? `<button class="btn o sm" data-rm="${esc(s.d)}">Remove</button>` : ''}${siteDetail(s.d)}</div>`; }).join('')}</div>` : '<p class="empty">No sites yet. Connect Google above, or add one by hand below.</p>'}
+    + `<div class="card c12"><div class="ch"><div><h3>Your sites</h3><div class="sub">Sites found in your Google accounts are shown on the ${BRAND.name} home page under "Connected sites" (name, short description and a link) for free promotion. Switch off any site you do not want listed.</div></div></div>${sites.length ? `<div class="list">${sites.map((s) => { const pub = MINE.has(s.d), can = (s.verified || S.demo) && !s.manual; return `<div class="li" style="flex-wrap:wrap">${fav(s)}<div class="t"><b>${esc(s.d)}</b><span>${[s.ga && 'Analytics', s.gsc && 'Search Console', s.ads && 'AdSense', s.manual && 'added by hand'].filter(Boolean).join(' · ') || 'Demo site'}</span></div><label class="sw" title="Show this site in the dashboard"><input type="checkbox" data-sitetoggle="${esc(s.d)}" ${S.off[s.d] ? '' : 'checked'}><i></i><span>In dashboard</span></label><label class="sw ${can ? '' : 'dis'}" title="${can ? 'Free promotion on the home page' : 'Only sites found in your Google account can be promoted'}"><input type="checkbox" data-pub="${esc(s.d)}" ${pub ? 'checked' : ''} ${can ? '' : 'disabled'}><i></i><span>Show on home page</span></label><button class="btn o sm" data-rm="${esc(s.d)}" title="Remove and hide this site">Remove</button>${siteDetail(s.d)}</div>`; }).join('')}</div>` : '<p class="empty">No sites yet. Connect Google above, or add one by hand below.</p>'}
       <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap"><input class="input" id="addSite" placeholder="Add a site by hand: example.com" style="flex:1;min-width:220px"><button class="btn p" data-act="addsite">${I('plus', 16)} Add site</button></div><p class="sub" style="margin-top:8px">Sites added by hand work with all tools. They cannot be promoted because ownership is not proven.</p></div>`;
 };
 
@@ -790,7 +791,17 @@ document.addEventListener('click', async (e) => {
   if ((el = q('[data-scroll]'))) { const x = document.getElementById(el.dataset.scroll); if (x) x.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   if ((el = q('[data-sitetoggle]'))) { const d = el.dataset.sitetoggle; S.off[d] = !el.checked; if (S.site === d) S.site = 'all'; save(); return; }
   if ((el = q('[data-pub]'))) { const h = el.dataset.pub; if (el.checked) { el.checked = false; delete S.dirOff[h]; save(); promoteDialog(h); } else { try { await DIR.unpublish(h); MINE.delete(h); S.dirOff[h] = true; save(); DIRLIST = null; toast('Removed from the home page'); } catch (er) { el.checked = true; toast(er.message); } } return; }
-  if ((el = q('[data-rm]'))) { S.manual = S.manual.filter((d) => d !== el.dataset.rm); save(); rerender(); return; }
+  if ((el = q('[data-rm]'))) {
+    const h = el.dataset.rm;
+    S.manual = S.manual.filter((d) => d !== h);
+    S.hidden = S.hidden || {};
+    S.hidden[h] = true;
+    S.dirOff = S.dirOff || {};
+    S.dirOff[h] = true;
+    S.off[h] = true;
+    try { await DIR.unpublish(h); MINE.delete(h); DIRLIST = null; } catch(er){}
+    save(); toast(`Removed ${h}`); rerender(); return;
+  }
   if ((el = q('[data-viewrep]'))) { const r = hist()[+el.dataset.viewrep]; if (r) { showReport(r); document.getElementById('rep').scrollIntoView({ behavior: 'smooth' }); } return; }
   if ((el = q('[data-addsub]'))) { const h = el.dataset.addsub; if (!S.manual.includes(h)) S.manual.push(h); subInfo(h); save(); rerender(); return; }
   if (!(el = q('[data-act]'))) return;

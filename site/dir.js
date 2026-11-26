@@ -13,20 +13,45 @@
     firebase.initializeApp(CFG.firebase); auth = firebase.auth(); db = firebase.firestore();
   }
   const id = (host) => host.replace(/\./g, '_');
+  const JUNK = (h, n) => /(zrubix\.com|sop3a\.com|\.hosted\.app|\.web\.app|\.firebaseapp\.com|localhost)$/i.test(String(h || '')) || /^(not found|site not found|404|error)/i.test(String(n || ''));
   const D = {
     init,
     /** Calls cb(user|null) now and whenever login changes. */
-    async onUser(cb) { await init(); auth.onAuthStateChanged((u) => cb(u ? { uid: u.uid, name: u.displayName || u.email, email: u.email, photo: u.photoURL } : null)); },
+    async onUser(cb) {
+      await init();
+      auth.onAuthStateChanged((u) => {
+        if (u) D.purgeJunk().catch(() => {});
+        cb(u ? { uid: u.uid, name: u.displayName || u.email, email: u.email, photo: u.photoURL } : null);
+      });
+    },
     async signIn() { await init(); const p = new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' }); await auth.signInWithPopup(p); },
     async signOut() { await init(); await auth.signOut(); },
-    /** Public list for the home page. */
-    async list(limit = 60) { await init(); const s = await db.collection('directory').orderBy('at', 'desc').limit(limit).get(); return s.docs.map((d) => d.data()); },
+    /** Public list for the home page and /sites/. */
+    async list(limit = 60) {
+      await init();
+      const s = await db.collection('directory').orderBy('at', 'desc').limit(limit).get();
+      return s.docs.map((d) => d.data()).filter((d) => !JUNK(d.host, d.name));
+    },
     async mine() { await init(); if (!auth.currentUser) return []; const s = await db.collection('directory').where('uid', '==', auth.currentUser.uid).get(); return s.docs.map((d) => d.data()); },
     async publish(host, name, desc) {
       await init(); if (!auth.currentUser) throw new Error('Sign in first.');
+      if (JUNK(host, name)) throw new Error('Cannot publish this domain.');
       await db.collection('directory').doc(id(host)).set({ host, name: String(name).slice(0, 60), desc: String(desc || '').slice(0, 160), uid: auth.currentUser.uid, at: Date.now() });
     },
     async unpublish(host) { await init(); await db.collection('directory').doc(id(host)).delete(); },
+    async purgeJunk() {
+      await init();
+      if (!auth.currentUser) return;
+      const junkHosts = [
+        'zrubix.com', 'sop3a.com',
+        'three-d-models--d-models-bfb95.asia-southeast1.hosted.app',
+        'd-models-bfb95.web.app',
+        'd-models-bfb95.firebaseapp.com'
+      ];
+      for (const h of junkHosts) {
+        try { await db.collection('directory').doc(id(h)).delete(); } catch(e) {}
+      }
+    },
 
     /* ---- Webly Analytics: the user's tagged sites (wsites) and their day docs (wsites/{id}/d/{YYYY-MM-DD}) ---- */
     async tagSites() { await init(); if (!auth.currentUser) return []; const s = await db.collection('wsites').where('uid', '==', auth.currentUser.uid).get(); return s.docs.map((d) => ({ id: d.id, ...d.data() })); },
